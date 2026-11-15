@@ -43,7 +43,7 @@ export async function getCollectionAdditions(
             AND a."afterJson"->>'deleted' IS DISTINCT FROM 'true'
           THEN COALESCE(${quantity(after, "quantityTransferred")}, 0) ELSE 0 END
         ELSE COALESCE(${quantity(after, "quantityAdded")}, ${quantity(after, "quantityImported")},
-          GREATEST(0, COALESCE(${quantity(after, "quantity")}, 0) - COALESCE(${quantity(before, "quantity")}, 0)))
+          GREATEST(0, ${quantity(after, "quantity")} - ${quantity(before, "quantity")}))
         END AS copies
       FROM "InventoryAuditLog" a
       LEFT JOIN "InventoryItem" i ON i.id = COALESCE(a."inventoryItemId", a."afterJson"->>'id', a."afterJson"->>'inventoryItemId')

@@ -88,11 +88,11 @@ try {
       await receipt(72, 103, { quantityImported: 3 }, "import_committed", {
         quantity: 100,
       });
-      await receipt(72, 4, {}, "acquisition_committed", {}, -1);
+      await receipt(72, 4, {}, "acquisition_committed", { quantity: 0 }, -1);
       await receipt(168, 5);
-      await receipt(168, 6, {}, "acquisition_committed", {}, -1);
+      await receipt(168, 6, {}, "acquisition_committed", { quantity: 0 }, -1);
       await receipt(720, 7);
-      await receipt(720, 8, {}, "acquisition_committed", {}, -1);
+      await receipt(720, 8, {}, "acquisition_committed", { quantity: 0 }, -1);
       await receipt(-1, 9);
       await receipt(
         1,
@@ -143,6 +143,8 @@ try {
       await receipt(1, 1); // Deleted lot still counts as a historical addition.
       for (const bad of ["bad", 9999999999, -1, 1.2])
         await receipt(1, bad as any);
+      await receipt(1, 100, {}, "import_committed", { quantity: "bad" });
+      await receipt(1, 100, {}, "inventory_added", {});
       await receipt(1, 0);
       const started = performance.now();
       const result = await getCollectionAdditions(
