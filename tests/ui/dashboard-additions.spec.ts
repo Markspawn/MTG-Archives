@@ -27,12 +27,13 @@ test("dashboard shows personal rolling additions and partial values on desktop a
     );
   }
   const fixture = database(`
-    const users=[];for(const suffix of ['', '-other'])users.push(await p.user.create({data:{username:${JSON.stringify(tag)}+suffix,displayName:'Additions reviewer',passwordHash:await require('bcryptjs').hash(${JSON.stringify(password)},10),player:{create:{name:${JSON.stringify(tag)}+suffix,displayName:'Additions reviewer'}}}}));
+    return p.$transaction(async p=>{
+    const users=[];for(const suffix of ['', '-other'])users.push(await p.user.create({data:{username:${JSON.stringify(tag)}+suffix,displayName:${JSON.stringify(tag)}+suffix,passwordHash:await require('bcryptjs').hash(${JSON.stringify(password)},10),player:{create:{name:${JSON.stringify(tag)}+suffix,displayName:${JSON.stringify(tag)}+suffix}}}}));
     const card=await p.card.create({data:{scryfallId:${JSON.stringify(tag)},name:'Dashboard fixture',typeLine:'Artifact',setCode:'tst',collectorNumber:'1',rarity:'common',prices:{usd:'2.50'}}});
     const now=Date.now();const add=async(owner,hours,qty,action='acquisition_committed',extra={},before={quantity:0})=>p.inventoryAuditLog.create({data:{changeType:action,beforeJson:before,afterJson:{currentOwnerId:owner,cardId:card.id,quantity:qty,foilStatus:'NONFOIL',...extra},createdAt:new Date(now-hours*3600000)}});
     await add(users[0].playerId,1,2);await add(users[0].playerId,48,105,'inventory_added',{quantityAdded:5},{quantity:100});await add(users[0].playerId,120,7,'import_committed',{quantityImported:7});await add(users[0].playerId,360,9);await add(users[0].playerId,1,3,'acquisition_committed',{foilStatus:'FOIL'});
     await add(users[0].playerId,1,1000,'inventory_restored');await add(users[0].playerId,1,1000,'location_moved');await add(users[1].playerId,1,500);
-    return {users:users.map(u=>({id:u.id,playerId:u.playerId})),cardId:card.id};
+    return {users:users.map(u=>({id:u.id,playerId:u.playerId})),cardId:card.id};});
   `);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
