@@ -965,6 +965,8 @@ model InventoryAuditLog {
   createdAt       DateTime       @default(now())
   tradeId         String?
   trade           Trade?         @relation(fields: [tradeId], references: [id])
+
+  @@index([createdAt, changeType])
 }
 
 model ImportBatch {

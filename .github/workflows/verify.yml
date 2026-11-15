@@ -443,3 +443,5 @@ jobs:
           mkdir -p .local-data/trade-audit
           git show b810f06a18f1e358b970bccf8093e4b1026eeb66:app/trades/actions.ts > .local-data/trade-audit/baseline-actions.ts
       - run: npx tsx scripts/ci/trade-audit-history.ts
+      - name: Rolling collection additions, valuation and owner isolation
+        run: npx tsx scripts/ci/collection-additions.ts

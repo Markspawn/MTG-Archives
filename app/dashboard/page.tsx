@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Nav } from "@/components/Nav";
 import { getAccessScope, getCurrentUser } from "@/lib/auth";
 import { TradeStatus } from "@prisma/client";
+import { getCollectionAdditions } from "@/lib/collection-additions-store";
 
 const openTradeStatuses = [
   TradeStatus.PROPOSED,
@@ -40,6 +41,7 @@ export default async function DashboardPage({
     adminUsers,
     adminCards,
     adminOpenTrades,
+    additions,
   ] = await Promise.all([
     ownerId
       ? prisma.inventoryItem.count({
@@ -91,6 +93,7 @@ export default async function DashboardPage({
     adminModeActive
       ? prisma.trade.count({ where: { status: { in: openTradeStatuses } } })
       : Promise.resolve(0),
+    getCollectionAdditions(prisma, ownerId, user?.preferredPriceProvider),
   ]);
 
   return (
@@ -137,6 +140,60 @@ export default async function DashboardPage({
           ))}
         </div>
       </section>
+      {user?.playerId ? (
+        <section
+          aria-labelledby="collection-additions-heading"
+          className="space-y-3"
+        >
+          <div>
+            <h2
+              id="collection-additions-heading"
+              className="text-xl font-semibold"
+            >
+              Cards added
+            </h2>
+            <p className="text-sm text-zinc-400">
+              Additions recorded in your collection over each rolling period,
+              including cards later removed. Values use current USD prices.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {additions.map((period) => (
+              <div
+                key={period.hours}
+                className="rounded border border-zinc-800 p-3 sm:p-4"
+              >
+                <h3 className="text-sm text-zinc-400">Last {period.label}</h3>
+                <p className="mt-1 text-2xl font-bold">
+                  {period.copies.toLocaleString("en-US")}{" "}
+                  <span className="text-sm font-normal">copies</span>
+                </p>
+                <p className="mt-2 font-semibold">
+                  {period.valueUsd.toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })}
+                </p>
+                <p className="text-xs text-zinc-400">
+                  {period.unpricedCopies
+                    ? "Priced subtotal"
+                    : "Estimated value"}
+                </p>
+                {period.unpricedCopies > 0 ? (
+                  <p className="mt-1 text-xs text-amber-300">
+                    {period.unpricedCopies.toLocaleString("en-US")} unpriced{" "}
+                    {period.unpricedCopies === 1 ? "copy" : "copies"}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-400">
+            Based on recorded addition history. Moves, edits and restores are
+            excluded. Price estimates are not purchase costs or profit.
+          </p>
+        </section>
+      ) : null}
       <section
         aria-label="Collection tasks"
         className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
@@ -199,7 +256,8 @@ export default async function DashboardPage({
           </ul>
         ) : (
           <p className="text-sm text-zinc-400">
-            No inventory entries yet. Open Add &amp; export to upload a CSV or add cards.
+            No inventory entries yet. Open Add &amp; export to upload a CSV or
+            add cards.
           </p>
         )}
       </section>
