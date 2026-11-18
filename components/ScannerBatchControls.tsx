@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
+import {createVisiblePoller} from "@/lib/visible-poller";
+import {useVisiblePolling} from "./useVisiblePolling";
 import type { listScannerAgents } from "@/lib/scanner-store";
 import type { getScannerBatch } from "@/lib/scanner-runs";
 import { filterButtonClass as button, filterInputClass as input, filterPanelClass as panel } from "./filterStyles";
@@ -12,8 +14,8 @@ type Run = Awaited<ReturnType<typeof getScannerBatch>>;
 export type ScannerChoice = { agentId: string; deviceId: string; loadedCount: null;
   operatorLoadedSimplexFronts: true; settings: { dpi: 300 | 600; widthInches: number; heightInches: number;
     horizontalPlacement: "Start" | "Center" | "End"; duplex: false; color: "RGB"; autoCrop: false; deskew: false; removeBlank: false } };
-async function call<T>(path: string, body?: object): Promise<T> {
-  const response = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
+async function call<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store", signal });
   const value = await response.json();
   if (!response.ok) throw new Error(value.error ?? "Scanner request failed; originals remain saved.");
   return value;
@@ -27,13 +29,14 @@ export function ScannerSourceFields({ initialEnabled, initialChoice, onChange, r
   const [error, setError] = useState("");
   const [placement, setPlacement] = useState<ScannerChoice["settings"]["horizontalPlacement"]>(initialChoice?.settings.horizontalPlacement ?? "Center");
   const frame = initialChoice?.settings;
-  const refresh = async () => { try { setAgents((await call<{ agents: Agent[] }>("/api/scanners")).agents); setError(""); } catch (e) { setError((e as Error).message); } };
-  useEffect(() => {
+  const loadAgents = useCallback(async (signal: AbortSignal) => {
     if (!enabled) return;
-    const immediate = setTimeout(() => void refresh(), 0);
-    const timer = setInterval(() => void refresh(), 5000);
-    return () => { clearTimeout(immediate); clearInterval(timer); };
+    try {
+      const next = await call<{agents: Agent[]}>("/api/scanners", undefined, signal);
+      if (!signal.aborted) {setAgents(next.agents);setError("");}
+    } catch (e) { if (!signal.aborted) setError((e as Error).message); }
   }, [enabled]);
+  const refresh = useVisiblePolling(loadAgents, enabled ? 5000 : null);
   const sources = agents.filter(a=>a.online && isNativeScannerVersion(a.agentVersion)).flatMap(a=>a.devices
     .filter(d=>d.qualification!=="Unsupported").map(d=>({ key: `${a.id}/${d.id}`, agentId: a.id, device: d,
       detecting: a.discoveryIssues?.some(issue=>issue.code==="DISCOVERY_IN_PROGRESS") ?? false,
@@ -107,10 +110,13 @@ export function ScannerRunControls({ runId, savedImages, refresh }: { runId: str
   const refillKey = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
-    const load = async () => { try { const result = await call<Run>("/api/scanners/runs?run="+runId); if(active) setRun(result); }
-      catch(e) { if(active) setError((e as Error).message); } };
-    void load(); const timer = setInterval(()=>void load(),2000);
-    return ()=>{active=false;clearInterval(timer);};
+    let settled = false;
+    const poller = createVisiblePoller(async signal => { try {
+      const result = await call<Run>("/api/scanners/runs?run="+runId, undefined, signal);
+      if(active && !signal.aborted) {setRun(result);settled = ["DRAINED","CANCELLED_BEFORE_START"].includes(result.status);}
+    } catch(e) { if(active && !signal.aborted) setError((e as Error).message); } }, () => settled ? 15000 : 2000);
+    void poller.refresh();
+    return ()=>{active=false;poller.stop();};
   }, [runId]);
   useEffect(() => {
     const timer = setTimeout(()=>{ setObserved(false); setRefillReady(false); setEmitted(0); setRemainingCards(0); refillKey.current = null; },0);

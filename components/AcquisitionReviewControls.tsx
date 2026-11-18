@@ -3,6 +3,7 @@ import {AcquisitionLanguageSelect} from "./AcquisitionLanguageSelect";
 import { acquisitionReviewProgress } from "@/lib/acquisition-processing-status";
 import { acquisitionCatalogMessage } from "@/lib/acquisition-catalog-status";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {createVisiblePoller} from "@/lib/visible-poller";
 import {
   AcquisitionScanImage,
   AcquisitionEvidenceFields,
@@ -73,11 +74,11 @@ function PrintingImage({
     />
   );
 }
-async function call<T>(url: string, body?: unknown): Promise<T> {
+async function call<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(
     url,
     body === undefined
-      ? { cache: "no-store" }
+      ? { cache: "no-store", signal }
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -375,14 +376,15 @@ export function AcquisitionPhotoReview({
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
-    async function load() {
+    async function load(signal: AbortSignal) {
       if (busy) return;
       const version = ++requestVersion.current;
       try {
         const next = await call<AcquisitionCardReview>(
           `${endpoint}?photoId=${photoId}`,
+          undefined, signal,
         );
-        if (!cancelled && version === requestVersion.current) {
+        if (!signal.aborted && !cancelled && version === requestVersion.current) {
           setObservedRevision(next.revision);
           if (!dirty.current && !regionEditing) {
             apply(next);
@@ -426,13 +428,11 @@ export function AcquisitionPhotoReview({
           }
         }
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!signal.aborted && !cancelled) setError((e as Error).message);
       }
     }
-    void load();
-    const timer = setInterval(
-      () => {
-        if (
+    const poller = createVisiblePoller(load, () => {
+        const pending = (
           (!reviewed || record?.manualRegionRequestedRevision === record?.revision) &&
           (!recognitionStatus ||
             ["WAITING", "RUNNING", "PENDING"].includes(visualStatus ?? "") ||
@@ -441,18 +441,18 @@ export function AcquisitionPhotoReview({
             ["CHECKING", "PROVIDER_ERROR", "NOT_FOUND", "INCOMPLETE"].includes(
               catalogStatus ?? "",
             ))
-        )
-          void load();
-      },
-      catalogStatus === "PROVIDER_ERROR" ||
+        );
+      if (!pending) return null;
+      return catalogStatus === "PROVIDER_ERROR" ||
         catalogStatus === "NOT_FOUND" ||
         catalogStatus === "INCOMPLETE"
         ? 30000
-        : 4000,
-    );
+        : 4000;
+    });
+    void poller.refresh();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      poller.stop();
     };
     // A dirty form retains its revision so a concurrent edit is rejected on save.
   }, [

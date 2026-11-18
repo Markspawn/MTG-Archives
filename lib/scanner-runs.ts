@@ -234,8 +234,11 @@ export async function receiveScannerImage(db: PrismaClient, authorization: strin
     const auth = await agentRun(tx, authorization, input, epoch), { run } = auth;
     await tx.$queryRaw`SELECT id FROM "ScannerRun" WHERE id = ${run.id} FOR UPDATE`;
     if (run.executionId !== input.executionId || !["STARTED", "DRAINED", "ERROR"].includes(run.status)) throw denied();
-    const state = await getStartState(tx, auth.actor, run.acquisitionRun.sessionId);
+    // Transfer admission only needs the locked session's current destination.
+    // Hydrating every earlier image here makes total intake work quadratic.
+    await tx.$queryRaw`SELECT id FROM "AcquisitionSession" WHERE id = ${run.acquisitionRun.sessionId} FOR UPDATE`;
     const row = await readAcquisitionRow(tx, auth.actor, run.acquisitionRun.sessionId, {});
+    const state = hydrateAcquisitionRow(row);
     const old = await tx.acquisitionCaptureSlot.findUnique({ where: { runId_requestKey: {
       runId: row.run!.id, requestKey: input.artifactId } } });
     if (old && old.position !== run.sequenceOffset + input.sequence - 1) throw new ScannerRunConflict("Photo scanner sequence identity conflict");
