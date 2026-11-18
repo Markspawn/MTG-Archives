@@ -10,6 +10,9 @@ import {createAcquisitionSession, executeAcquisitionCommand, reserveAcquisitionC
 import {inspectAcquisitionPhoto, writeAcquisitionPhotoBytes, canonicalizeAcquisitionPhoto} from "../../lib/acquisition-files";
 import {ensureCorrectionAccount} from "../../lib/acquisition-correction-library";
 import {getAcquisitionBatchDashboard} from "../../lib/acquisition-batch-dashboard";
+import {PRINTING_STAGE} from "../../lib/acquisition-printing";
+import {CATALOG_RECONCILIATION_STAGE} from "../../lib/acquisition-catalog-status";
+import {VISUAL_STAGE} from "../../lib/acquisition-visual";
 
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 if (process.env.MTG_ACQUISITION_PERFORMANCE_TEST !== "1" ||
@@ -27,6 +30,8 @@ const ids: string[] = [], photoIds: string[] = [];
 let successful = false;
 
 async function main() {
+  // Refuse before any fixture write if the disposable schema is not ready.
+  await db.acquisitionProcessingJob.count();
   await mkdir(root, {recursive: true});
   const token = randomBytes(32).toString("base64url"), passwordHash = randomBytes(32).toString("hex");
   await db.player.create({data:{id:tag,name:tag,displayName:tag}});
@@ -87,6 +92,9 @@ async function main() {
         observations.push({id:randomUUID(),runId,sourceId:id,artifactId,candidateId,side:"FRONT"});
         jobs.push({id:randomUUID(),runId,artifactId,candidateId,candidateRevision:0,stage:"photo-canonical-v1",
           versionKey:"fixture-canonical",input:{},status:"COMPLETE" as const,output:prepared});
+        for(const stage of ["photo-recognition-v1",CATALOG_RECONCILIATION_STAGE,VISUAL_STAGE,PRINTING_STAGE])
+          jobs.push({id:randomUUID(),runId,artifactId,candidateId,candidateRevision:0,stage,
+            versionKey:"fixture-pending",input:{},status:"PENDING" as const,output:{}});
         if(b===0) {
           photoIds.push(id);
           for(const suffix of ["original","preview.jpg"])
@@ -120,6 +128,41 @@ async function main() {
     const review=await getAcquisitionCardReview(db,actor,batch,photo.id);assert.equal(review.photoId,photo.id);
     samples.push({batches:count,cards:count*100,progressMs,imageMetadataMeanMs,dashboardMs});
   }
+  const rollback=new Error("ROLL_BACK_DASHBOARD_CONTROLS");
+  try {
+    await db.$transaction(async tx=>{
+      await tx.acquisitionSession.update({where:{id:batch},data:{updatedAt:new Date()}});
+      const candidate=await tx.acquisitionCandidate.findUniqueOrThrow({where:{runId_physicalId:{runId:originalRun.id,physicalId:photo.slotId}}});
+      const artifact=await tx.acquisitionArtifact.findUniqueOrThrow({where:{runId_sourceId:{runId:originalRun.id,sourceId:photo.id}}});
+      const row=async()=>{
+        const dashboard=await getAcquisitionBatchDashboard(tx as unknown as PrismaClient,actor,{view:"all"});
+        return {dashboard,batch:dashboard.rows.find(r=>r.id===batch)!};
+      };
+      const stamp=new Date("2025-01-01T00:00:00Z");
+      await tx.acquisitionProcessingJob.createMany({data:[
+        {id:"00000000-0000-4000-8000-000000000001",runId:originalRun.id,candidateId:candidate.id,artifactId:artifact.id,
+          candidateRevision:candidate.revision,stage:PRINTING_STAGE,versionKey:"failed",input:{},status:"FAILED",createdAt:stamp},
+        {id:"00000000-0000-4000-8000-000000000002",runId:originalRun.id,candidateId:candidate.id,artifactId:artifact.id,
+          candidateRevision:candidate.revision,stage:PRINTING_STAGE,versionKey:"latest",input:{},status:"COMPLETE",createdAt:stamp},
+        {id:"00000000-0000-4000-8000-000000000003",runId:originalRun.id,candidateId:candidate.id,artifactId:artifact.id,
+          candidateRevision:candidate.revision,stage:"fixture-failed-stage",versionKey:"another-failure",input:{},status:"FAILED",createdAt:stamp},
+      ]});
+      let current=await row();
+      assert.equal(current.batch.captured,100);assert.equal(current.batch.evaluated,1);assert.equal(current.batch.failed,1);
+      await tx.acquisitionProcessingJob.update({where:{id:"00000000-0000-4000-8000-000000000002"},data:{status:"PENDING"}});
+      current=await row();assert.equal(current.batch.evaluated,0);assert.equal(current.batch.failed,1);
+      await tx.acquisitionCandidate.update({where:{id:candidate.id},data:{revision:candidate.revision+1}});
+      current=await row();assert.equal(current.batch.failed,0);
+      await tx.acquisitionCandidate.update({where:{id:candidate.id},data:{revision:candidate.revision,
+        review:{cardId:"dashboard-sentinel",language:"en",finish:"NONFOIL",condition:"NM",actorId:tag}}});
+      current=await row();assert.equal(current.batch.confirmed,1);assert.equal(current.batch.evaluated,1);assert.equal(current.batch.failed,0);
+      await tx.acquisitionCandidate.update({where:{id:candidate.id},data:{excluded:true}});
+      current=await row();assert.equal(current.batch.captured,99);assert.equal(current.batch.confirmed,0);
+      await tx.acquisitionSession.update({where:{id:batch},data:{trashedAt:new Date()}});
+      current=await row();assert.equal(current.dashboard.totals.batches,batches-1);assert.equal(current.dashboard.totals.captured,(batches-1)*100);
+      throw rollback;
+    },{timeout:30000});
+  } catch(error){if(error!==rollback)throw error;}
   // A correction publication holds the same owner lock used by upload sampling.
   // Existing-key ordinary review must finish before that lock is released.
   let locked!:()=>void, release!:()=>void;
@@ -139,7 +182,7 @@ async function main() {
   if(keep) await writeFile("/tmp/pending-performance-fixture.json",JSON.stringify({tag,token,batch,photoId:photo.id,originalDigest:photo.digest,
     originalBytes:photo.bytes,previewBytes:prepared.bytes,sourceWidth:1620,sourceHeight:2160,samples}));
   console.log(JSON.stringify({scope:"synthetic metadata/UI backlog; no native recognition or physical throughput claim",samples,
-    privateOriginalBytes:photo.bytes,privatePreviewBytes:prepared.bytes,ownerLockIndependentReview:true,inventoryWrites:0}));
+    privateOriginalBytes:photo.bytes,privatePreviewBytes:prepared.bytes,ownerLockIndependentReview:true,dashboardStatusControls:true,inventoryWrites:0}));
   successful=true;
 }
 
@@ -159,5 +202,9 @@ async function cleanup() {
     await rm(path.join(root,"acquisition-v1",`${id}.${suffix}`),{force:true});
 }
 void (async()=>{
-  try{await main();}finally{try{await cleanup();}finally{process.env.UPLOADS_DATA_PATH=oldRoot;await db.$disconnect();}}
+  let failure: unknown;
+  try{await main();}catch(error){failure=error;}
+  try{await cleanup();}catch(error){failure=failure?new AggregateError([failure,error],"Performance check and cleanup failed"):error;}
+  finally{process.env.UPLOADS_DATA_PATH=oldRoot;await db.$disconnect();}
+  if(failure)throw failure;
 })().catch(error=>{console.error(error);process.exitCode=1;});

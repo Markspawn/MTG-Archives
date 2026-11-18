@@ -34,6 +34,21 @@ history and remaining affected-installation criteria are preserved in #1004.
 - Ordinary owner review reads an existing immutable correction signing key
   without the exclusive lock/upsert shared with uploads. Initialization, sampling,
   publication and cross-owner auditing retain mutation locks and checks.
+- The dashboard resolves latest printing checks and failure identities in sets,
+  preserving latest-job ordering, revision fences and one count per physical
+  card. It avoids a correlated lookup for every retained candidate. Matched
+  100,000-card controls return identical full dashboard data; warm observations
+  improved from roughly 2.1–2.6 seconds to 0.43–0.44 seconds before adding the
+  larger five-stage queue fixture. Aggregate totals still read retained metadata;
+  no claim of constant-time all-history totals is made.
+
+The larger five-stage fixture contains 100,000 cards and 499,996 job records.
+Its original dashboard query exceeded 105 seconds and that exact owned local
+diagnostic read was cancelled; the failure is retained. The set-based query
+completed in 3.6–3.9 seconds; fixed-page review took 145–304 ms and photo metadata
+5–8 ms. These are local synthetic observations, not production guarantees. A
+query-local JIT comparison did not establish a sufficiently consistent further
+benefit; no database configuration change is included.
 
 Paging, bounded memory and concurrency regulate work, never saved scan/batch
 counts. No count cap, pool enlargement, replica change or storage/physical-capacity

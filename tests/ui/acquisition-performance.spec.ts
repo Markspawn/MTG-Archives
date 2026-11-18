@@ -15,11 +15,14 @@ function fixture() {return database("return JSON.parse(require('fs').readFileSyn
 function fingerprint() {
   return database(`const result={};for(const name of ['AcquisitionSession','AcquisitionCaptureSlot','AcquisitionPhoto','AcquisitionCandidate','AcquisitionArtifact','AcquisitionObservation','AcquisitionProcessingJob','InventoryItem','AcquisitionCommit','AcquisitionCommitMember']){const [row]=await p.$queryRawUnsafe('SELECT count(*)::int AS count,md5(COALESCE(string_agg(row_to_json(t)::text,\'\' ORDER BY row_to_json(t)::text COLLATE "C"),\'\')) AS hash FROM "'+name+'" t');result[name]=row;}return result;`);
 }
+let sourceSnapshot: unknown;
+test.beforeAll(()=>{sourceSnapshot=fingerprint();});
+test.afterAll(()=>{expect(fingerprint()).toEqual(sourceSnapshot);});
 
 for(const width of [1366,390,320])test(`retained backlog uses private previews without repeated originals at ${width}px`,async({page,browser,baseURL})=>{
   test.setTimeout(120000);
   expect(new URL(baseURL!).hostname).toBe("127.0.0.1");
-  const f=fixture(),before=fingerprint(),raw=`/api/acquisition/${f.batch}/photos/${f.photoId}`;
+  const f=fixture(),raw=`/api/acquisition/${f.batch}/photos/${f.photoId}`;
   const baseline=process.env.MTG_PERFORMANCE_BASELINE==="1";
   await page.setViewportSize({width,height:900});
   await page.context().addCookies([{name:"mtg_inventory_session",value:f.token,url:baseURL!,httpOnly:true,sameSite:"Lax"}]);
@@ -61,9 +64,9 @@ for(const width of [1366,390,320])test(`retained backlog uses private previews w
   finally{await anonymous.close();}
   expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:test.info().outputPath(`review-${width}.png`)});
-  await page.goto("about:blank");expect(fingerprint()).toEqual(before);
+  await page.goto("about:blank");
   writeFileSync(test.info().outputPath("measurements.json"),JSON.stringify({width,baseline,firstVisibleMs,
-    reviewImageRequests:countBeforeOriginal,originalBytes:f.originalBytes,previewBytes:f.previewBytes,conserved:true},null,2));
+    reviewImageRequests:countBeforeOriginal,originalBytes:f.originalBytes,previewBytes:f.previewBytes,conservation:"file-level before/after"},null,2));
 });
 
 test("unavailable preview falls back to the original and image retry recovers",async({page,baseURL})=>{

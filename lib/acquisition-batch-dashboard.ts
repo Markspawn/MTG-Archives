@@ -45,6 +45,19 @@ export async function getAcquisitionBatchDashboard(db: PrismaClient, actor: Acqu
       FROM "AcquisitionSession" s JOIN "AcquisitionRun" r ON r."sessionId"=s.id
       JOIN "Player" p ON p.id=s."ownerPlayerId" LEFT JOIN "InventoryLocation" l ON l.id=s."locationId"
       WHERE ${owner} AND s."deletedAt" IS NULL AND r."providerId" IN ('phone-photo-v1','windows-scanner-simplex-v1')
+    ), latest_checks AS (
+      -- Resolve the newest printing job once per candidate/artifact. A lateral
+      -- sort/limit for every retained card inflates both execution and JIT work
+      -- even when this owner has no printing jobs at all.
+      SELECT DISTINCT ON (j."candidateId", j."artifactId")
+        j."candidateId", j."artifactId", j.status
+      FROM "AcquisitionProcessingJob" j JOIN sessions s ON s."runId"=j."runId"
+      WHERE j.stage=${PRINTING_STAGE}
+      ORDER BY j."candidateId",j."artifactId",j."createdAt" DESC,j.id DESC
+    ), failed_checks AS (
+      SELECT DISTINCT j."candidateId",j."candidateRevision",j."artifactId"
+      FROM "AcquisitionProcessingJob" j JOIN sessions s ON s."runId"=j."runId"
+      WHERE j.status='FAILED'
     ), counts AS (
       SELECT s.id, COUNT(c.id)::int AS captured,
         COUNT(c.id) FILTER (WHERE review.confirmed OR checked.status='COMPLETE')::int AS evaluated,
@@ -52,16 +65,14 @@ export async function getAcquisitionBatchDashboard(db: PrismaClient, actor: Acqu
         COUNT(c.id) FILTER (WHERE review.confirmed)::int AS confirmed,
         COUNT(receipt."candidateId")::int AS added,
         COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND NOT review.confirmed AND checked.status IS DISTINCT FROM 'COMPLETE')::int AS processing,
-        COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND NOT review.confirmed AND EXISTS (
-          SELECT 1 FROM "AcquisitionProcessingJob" j WHERE j."artifactId"=artifact.id AND j."candidateId"=c.id AND j."candidateRevision"=c.revision AND j.status='FAILED'
-        ))::int AS failed
+        COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND NOT review.confirmed AND failed."candidateId" IS NOT NULL)::int AS failed
       FROM sessions s LEFT JOIN "AcquisitionCandidate" c ON c."runId"=s."runId" AND NOT c.excluded
       LEFT JOIN "AcquisitionCommitMember" receipt ON receipt."candidateId"=c.id
       LEFT JOIN "AcquisitionCaptureSlot" slot ON slot.id=c."physicalId" AND slot."runId"=c."runId"
       LEFT JOIN "AcquisitionPhoto" photo ON photo."slotId"=slot.id AND photo.generation=slot.generation AND photo.ready
       LEFT JOIN "AcquisitionArtifact" artifact ON artifact."runId"=c."runId" AND artifact."sourceId"=photo.id
-      LEFT JOIN LATERAL (SELECT j.status FROM "AcquisitionProcessingJob" j WHERE j."candidateId"=c.id AND j."artifactId"=artifact.id AND j.stage=${PRINTING_STAGE}
-        ORDER BY j."createdAt" DESC,j.id DESC LIMIT 1) checked ON TRUE
+      LEFT JOIN latest_checks checked ON checked."candidateId"=c.id AND checked."artifactId"=artifact.id
+      LEFT JOIN failed_checks failed ON failed."candidateId"=c.id AND failed."artifactId"=artifact.id AND failed."candidateRevision"=c.revision
       CROSS JOIN LATERAL (SELECT COALESCE(c.review->>'cardId','')<>'' AND COALESCE(c.review->>'language','')<>''
         AND COALESCE(c.review->>'condition','')<>'' AND COALESCE(c.review->>'finish','UNKNOWN')<>'UNKNOWN' AS confirmed) review
       GROUP BY s.id
