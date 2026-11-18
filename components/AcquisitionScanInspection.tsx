@@ -238,7 +238,6 @@ export function AcquisitionScanImage({
     displayView,
     rotation,
     compact,
-    retry,
   ]);
   return (
     <figure className="min-w-0">

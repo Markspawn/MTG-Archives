@@ -13,10 +13,15 @@ function database(body:string) {
 }
 function fixture() {return database("return JSON.parse(require('fs').readFileSync('/tmp/pending-performance-fixture.json','utf8'));");}
 function fingerprint() {
-  return database(`const result={};for(const name of ['AcquisitionSession','AcquisitionCaptureSlot','AcquisitionPhoto','AcquisitionCandidate','AcquisitionArtifact','AcquisitionObservation','AcquisitionProcessingJob','InventoryItem','AcquisitionCommit','AcquisitionCommitMember']){const [row]=await p.$queryRawUnsafe('SELECT count(*)::int AS count,md5(COALESCE(string_agg(row_to_json(t)::text,\'\' ORDER BY row_to_json(t)::text COLLATE "C"),\'\')) AS hash FROM "'+name+'" t');result[name]=row;}return result;`);
+  return database(`const {rowFingerprintSql}=require('./tests/row-fingerprint.cjs');const result={};for(const name of ['AcquisitionSession','AcquisitionCaptureSlot','AcquisitionPhoto','AcquisitionCandidate','AcquisitionArtifact','AcquisitionObservation','AcquisitionProcessingJob','InventoryItem','AcquisitionCommit','AcquisitionCommitMember']){const [row]=await p.$queryRawUnsafe(rowFingerprintSql(name));result[name]=row;}return result;`);
 }
 let sourceSnapshot: unknown;
-test.beforeAll(()=>{sourceSnapshot=fingerprint();});
+test.beforeAll(()=>{
+  const result=database(`const {rowFingerprintSql}=require('./tests/row-fingerprint.cjs');return p.$transaction(async tx=>{await tx.$executeRawUnsafe('CREATE TEMP TABLE fingerprint_control(id text,value text) ON COMMIT DROP');await tx.$executeRawUnsafe("INSERT INTO fingerprint_control VALUES ('a','one'),('b','two')");const [before]=await tx.$queryRawUnsafe(rowFingerprintSql('fingerprint_control'));await tx.$executeRawUnsafe("UPDATE fingerprint_control SET value='changed' WHERE id='a'");const [changed]=await tx.$queryRawUnsafe(rowFingerprintSql('fingerprint_control'));await tx.$executeRawUnsafe('DELETE FROM fingerprint_control');await tx.$executeRawUnsafe("INSERT INTO fingerprint_control VALUES ('b','two'),('a','one')");const [reordered]=await tx.$queryRawUnsafe(rowFingerprintSql('fingerprint_control'));return {before,changed,reordered};});`);
+  expect(result.before.count).toBe(2);expect(result.before.hash).toHaveLength(64);
+  expect(result.changed.hash).not.toBe(result.before.hash);expect(result.reordered).toEqual(result.before);
+  sourceSnapshot=fingerprint();
+});
 test.afterAll(()=>{expect(fingerprint()).toEqual(sourceSnapshot);});
 
 for(const width of [1366,390,320])test(`retained backlog uses private previews without repeated originals at ${width}px`,async({page,browser,baseURL})=>{
@@ -60,7 +65,7 @@ for(const width of [1366,390,320])test(`retained backlog uses private previews w
   if(!baseline){expect(preview.headers()["x-photo-source-width"]).toBe("1620");expect(preview.headers()["x-photo-source-height"]).toBe("2160");}
   expect((await preview.body()).length).toBe(f.previewBytes);
   const anonymous=await browser.newContext({baseURL});
-  try{for(const url of [raw,raw+"?preview=1"])expect((await anonymous.request.get(url)).status()).toBe(401);}
+  try{for(const url of [raw,raw+"?preview=1"])expect((await anonymous.request.get(url)).status()).toBe(403);}
   finally{await anonymous.close();}
   expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:test.info().outputPath(`review-${width}.png`)});
