@@ -3,6 +3,7 @@ import { acquisitionActor, acquisitionError } from "@/lib/acquisition-api";
 import { getAcquisitionPhoto } from "@/lib/acquisition-store";
 import { readAcquisitionPhotoBytes } from "@/lib/acquisition-files";
 import { z } from "zod";
+import { acquisitionPreviewFrame } from "@/lib/acquisition-preview";
 export const runtime = "nodejs";
 export async function GET(
   request: Request,
@@ -18,6 +19,7 @@ export async function GET(
     );
     const preview = new URL(request.url).searchParams.get("preview") === "1";
     let digest = photo.digest;
+    let frame: {width: number; height: number} | undefined;
     if (preview) {
       const job = await prisma.acquisitionProcessingJob.findFirst({
         where: {
@@ -26,12 +28,17 @@ export async function GET(
           stage: "photo-canonical-v1",
           status: "COMPLETE",
         },
+        orderBy: [{createdAt: "desc"}, {id: "desc"}],
+        select: {output: true},
       });
       if (!job) throw new Error("Photo preview unavailable");
-      digest = z
-        .object({ previewDigest: z.string().regex(/^[a-f0-9]{64}$/) })
+      const prepared = z
+        .object({ previewDigest: z.string().regex(/^[a-f0-9]{64}$/),
+          width: z.number().int().positive(), height: z.number().int().positive() })
         .passthrough()
-        .parse(job.output).previewDigest;
+        .parse(job.output);
+      digest = prepared.previewDigest;
+      frame = acquisitionPreviewFrame(photo.width, photo.height, prepared.width, prepared.height);
     }
     const bytes = await readAcquisitionPhotoBytes(
       photo.id,
@@ -44,6 +51,7 @@ export async function GET(
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "Content-Disposition": 'inline; filename="card-photo"',
+        ...(frame ? {"X-Photo-Source-Width": String(frame.width), "X-Photo-Source-Height": String(frame.height)} : {}),
       },
     });
   } catch (error) {

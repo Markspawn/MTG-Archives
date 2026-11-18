@@ -445,3 +445,7 @@ jobs:
       - run: npx tsx scripts/ci/trade-audit-history.ts
       - name: Rolling collection additions, valuation and owner isolation
         run: npx tsx scripts/ci/collection-additions.ts
+      - name: Pending acquisition backlog and review/upload lock independence
+        env:
+          MTG_ACQUISITION_PERFORMANCE_TEST: '1'
+        run: npx tsx scripts/ci/acquisition-performance.ts

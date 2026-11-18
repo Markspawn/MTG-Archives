@@ -49,7 +49,11 @@ export async function correctionDisplayToken(tx: Tx, ownerPlayerId: string, acto
   photo: AcquisitionPhoto, candidate: { id: string; revision: number }, jobs: AcquisitionProcessingJob[],
   suggestions: Array<{ id: string; name: string; setCode: string; collectorNumber: string; lang: string | null;
     imageUri: string | null; finishes: unknown }>, status: string) {
-  const account = await ensureCorrectionAccount(tx, ownerPlayerId);
+  // Existing signing keys are immutable. Ordinary owner review is a read, not
+  // an exclusive lock/upsert shared with uploads and evidence publication.
+  // First-use initialization and cross-owner access auditing keep their locks.
+  const account = await tx.correctionLibraryAccount.findUnique({where: {ownerPlayerId}, select: {displayKey: true}})
+    ?? await ensureCorrectionAccount(tx, ownerPlayerId);
   await authorizeCorrectionLibrary(tx, actor, ownerPlayerId, "ACQUISITION_DISPLAY");
   try {
     return signCorrectionDisplay({ version: 1, ownerPlayerId, actorId: actor.userId, photoId: photo.id, digest: photo.digest,

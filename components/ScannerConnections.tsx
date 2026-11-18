@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import {useVisiblePolling} from "./useVisiblePolling";
 import { filterButtonClass, filterPanelClass, filterPrimaryButtonClass } from "./filterStyles";
 import type { listScannerAgents } from "@/lib/scanner-store";
 import { ScannerDiscoveryNotice } from "./ScannerDiscoveryNotice";
@@ -21,23 +22,17 @@ export function ScannerConnections({ newBatchHref }: { newBatchHref: string }) {
     setWaiting(true);
     window.location.href = `mtg-archive-scanner://resume?site=${encodeURIComponent(window.location.origin + "/")}`;
   }
-  const refresh = useCallback(async () => {
+  const loadConnections = useCallback(async (signal: AbortSignal) => {
     try {
-      const response = await fetch("/api/scanners", { cache: "no-store" });
+      const response = await fetch("/api/scanners", { cache: "no-store", signal });
       const value = await response.json();
       if (!response.ok) throw new Error("Scanner connections unavailable. Refresh and retry.");
+      if (signal.aborted) return;
       setAgents(value.agents);
       setError("");
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { if (!signal.aborted) setError((e as Error).message); }
   }, []);
-  useEffect(() => {
-    const timer = setTimeout(() => void refresh(), 0);
-    return () => clearTimeout(timer);
-  }, [refresh]);
-  useEffect(() => {
-    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 5000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  const refresh = useVisiblePolling(loadConnections, 5000);
   useEffect(() => {
     if (!expanded) return;
     let cancelled = false;

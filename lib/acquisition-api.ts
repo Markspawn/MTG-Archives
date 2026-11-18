@@ -69,6 +69,7 @@ export function acquisitionProgressDto(
     photoMatches: state.photoMatches,
     availableSlots: state.availableSlots,
     photoPreparation: state.photoPreparation,
+      processingStages: state.processingStages,
     defaults: state.defaults,
     defaultsRevision: state.defaultsRevision,
     ...(state.correctionLibrary ? { correctionLibrary: state.correctionLibrary } : {}),

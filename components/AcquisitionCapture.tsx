@@ -2,6 +2,8 @@
 import {AcquisitionLanguageSelect} from "./AcquisitionLanguageSelect";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {useVisiblePolling} from "./useVisiblePolling";
+import {createVisiblePoller} from "@/lib/visible-poller";
 import type { ScannerContinuation } from "@/lib/scanner-continuation";
 import { readScannerStart, saveScannerStart, clearScannerStart, type PendingScannerStart } from "@/lib/scanner-browser-start";
 import { AcquisitionCommitControls } from "./AcquisitionCommitControls";
@@ -70,11 +72,11 @@ function validatePhoto(blob: Blob) {
       "Choose JPEG, PNG or WebP photos under 10 MB. Convert HEIC to JPEG or use the in-app camera.",
     );
 }
-async function request<T>(url: string, value?: unknown): Promise<T> {
+async function request<T>(url: string, value?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(
     url,
     value === undefined
-      ? { cache: "no-store" }
+      ? { cache: "no-store", signal }
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -355,12 +357,12 @@ export function AcquisitionCapture({
   useEffect(() => {
     if ((!countedScanner && !capacityFilter) || batchId || !locationId) return;
     let active = true;
-    const load = async () => { try {
-      const value = await request<NonNullable<typeof scannerCapacity>>("/api/scanners/capacity?location="+encodeURIComponent(locationId)+"&section="+encodeURIComponent(section));
-      if (active) { setScannerCapacity(value); setCapacityError(""); }
-    } catch (e) { if (active) setCapacityError((e as Error).message); } };
-    void load(); const timer = setInterval(()=>void load(),5000);
-    return ()=>{active=false;clearInterval(timer);};
+    const poller = createVisiblePoller(async signal => { try {
+      const value = await request<NonNullable<typeof scannerCapacity>>("/api/scanners/capacity?location="+encodeURIComponent(locationId)+"&section="+encodeURIComponent(section), undefined, signal);
+      if (active && !signal.aborted) { setScannerCapacity(value); setCapacityError(""); }
+    } catch (e) { if (active && !signal.aborted) setCapacityError((e as Error).message); } }, () => 5000);
+    void poller.refresh();
+    return ()=>{active=false;poller.stop();};
   }, [countedScanner, capacityFilter, batchId, locationId, section, capacityRevision]);
   useEffect(() => {
     if (!customLimit) setQuantity(remaining ?? 1);
@@ -372,24 +374,19 @@ export function AcquisitionCapture({
       stream.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
-  const refresh = useCallback(async () => {
+  const loadProgress = useCallback(async (signal: AbortSignal) => {
     if (!batchId) return;
     try {
       const attempt = ++reviewRequest.current;
-      const state = await request<Progress>(`/api/acquisition/${batchId}?page=${reviewPage}`);
-      if (mounted.current && attempt === reviewRequest.current) setProgress(state);
+      const state = await request<Progress>(`/api/acquisition/${batchId}?page=${reviewPage}`, undefined, signal);
+      if (!signal.aborted && mounted.current && attempt === reviewRequest.current) setProgress(state);
     } catch (e) {
-      if (mounted.current) setError((e as Error).message);
+      if (!signal.aborted && mounted.current) setError((e as Error).message);
     }
   }, [batchId, reviewPage]);
-  useEffect(() => {
-    if (!batchId) return;
-    void refresh();
-    const timer = setInterval(() => {
-      void refresh();
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [batchId, refresh]);
+  const captureActive = !progress || ["CAPTURING", "STOPPING"].includes(progress.phase);
+  const processing = progress?.processingStages?.some(stage => stage.status === "PENDING" || stage.status === "RUNNING");
+  const refresh = useVisiblePolling(loadProgress, !batchId ? null : captureActive ? 2000 : processing ? 5000 : 15000);
   useEffect(() => {
     if (!batchId) return;
     let active = true;

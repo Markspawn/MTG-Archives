@@ -25,6 +25,7 @@ export function AcquisitionScanImage({
   const canvas = useRef<HTMLCanvasElement>(null);
   const [activated, setActivated] = useState(active);
   const [retry, setRetry] = useState(0);
+  const [loaded, setLoaded] = useState<{source: string; url: string; width?: number; height?: number} | null>(null);
   // Visibility starts lazy loading once. Keep the bounded canvas while scrolling;
   // downloading the private, no-store original again can fail unnecessarily.
   if (active && !activated) setActivated(true);
@@ -59,7 +60,35 @@ export function AcquisitionScanImage({
     lines: observation ? [...observation.lines, ...(observation.footerLines ?? [])] : undefined,
   });
   useEffect(() => {
-    if (!activated || !canvas.current) return;
+    if (!activated) return;
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    void (async () => {
+      try {
+        const response = await fetch(`${src}${src.includes("?") ? "&" : "?"}preview=1`,
+          {cache: "no-store", signal: controller.signal});
+        if (!response.ok) throw new Error("Preview unavailable");
+        const width = Number(response.headers.get("X-Photo-Source-Width"));
+        const height = Number(response.headers.get("X-Photo-Source-Height"));
+        if (![width, height].every(n => Number.isSafeInteger(n) && n > 0))
+          throw new Error("Preview frame unavailable");
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setLoaded({source: src, url: objectUrl, width, height});
+      } catch {
+        // Preparation may still be queued, or an older receipt may be missing.
+        // Keep the original readable, with its original coordinate frame.
+        if (!controller.signal.aborted) setLoaded({source: src, url: src});
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src, activated, retry]);
+  useEffect(() => {
+    if (!activated || !canvas.current || loaded?.source !== src) return;
     const { quad, readingZones, lines } = JSON.parse(renderEvidence) as {
       quad?: NonNullable<AcquisitionReviewEvidence>["geometry"]["quad"];
       readingZones?: NonNullable<AcquisitionReviewEvidence>["readingZones"];
@@ -73,6 +102,8 @@ export function AcquisitionScanImage({
       if (cancelled || !canvas.current) return;
       try {
         const ctx = target.getContext("2d")!;
+        const frameWidth = loaded.width ?? image.naturalWidth;
+        const frameHeight = loaded.height ?? image.naturalHeight;
         if (displayView === "original" || !quad) {
           const scale = Math.min(
             1,
@@ -86,8 +117,8 @@ export function AcquisitionScanImage({
             ctx.beginPath();
             quad.forEach(([x, y], i) =>
               i
-                ? ctx.lineTo(x * scale, y * scale)
-                : ctx.moveTo(x * scale, y * scale),
+                ? ctx.lineTo(x * image.naturalWidth / frameWidth * scale, y * image.naturalHeight / frameHeight * scale)
+                : ctx.moveTo(x * image.naturalWidth / frameWidth * scale, y * image.naturalHeight / frameHeight * scale),
             );
             ctx.closePath();
             ctx.strokeStyle = "#00ffff";
@@ -126,8 +157,8 @@ export function AcquisitionScanImage({
               rotation === 180 ? 1 - u : u,
               rotation === 180 ? 1 - v : v,
             );
-            const sx = (originalX * source.width) / image.naturalWidth,
-              sy = (originalY * source.height) / image.naturalHeight;
+            const sx = (originalX * source.width) / frameWidth,
+              sy = (originalY * source.height) / frameHeight;
             const x0 = Math.floor(sx),
               y0 = Math.floor(sy),
               fx = sx - x0,
@@ -191,7 +222,7 @@ export function AcquisitionScanImage({
           "Photo could not be loaded. Use Open original or retry the scan image.",
         );
     };
-    image.src = src;
+    image.src = loaded.url;
     return () => {
       cancelled = true;
       image.onload = null;
@@ -201,12 +232,12 @@ export function AcquisitionScanImage({
     };
   }, [
     src,
+    loaded,
     activated,
     renderEvidence,
     displayView,
     rotation,
     compact,
-    retry,
   ]);
   return (
     <figure className="min-w-0">
