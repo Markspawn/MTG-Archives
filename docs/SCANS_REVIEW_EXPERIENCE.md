@@ -56,3 +56,20 @@ and this evidence only; compiled product inputs remain identical. The stopped
 local review app/database, compiled image and synthetic originals are retained;
 temporary build/browser containers and two superseded images were retired and
 the exact runtime owner released. The primary local installation was preserved.
+
+## Reproducing the browser fixture
+
+In an owned disposable Linux review runtime, migrate the empty database named
+`review_pending_performance`, set `MTG_SCANS_EXPERIENCE_TEST=1`, then run
+`npx tsx scripts/ci/scans-review-experience.ts` inside the web container. The helper
+requires that exact local database name and an allowed local host, creates only
+synthetic accounts/cards/photos, and writes its private session receipt to
+`/tmp/scans-experience-fixture.json`. Keep processing workers stopped. Restart the
+owned review web after seeding so its synthetic public image is discoverable.
+
+Run `tests/ui/scans-review-experience.spec.ts` with the same opt-in flag,
+`MTG_INVENTORY_TEST_CONTAINER` set to that immutable owned web container ID, a
+single Chromium worker and base URL `http://127.0.0.1:13275`. The regression resets
+only this fixture's reviews between widths and requires zero Inventory additions
+and unchanged original metadata. Retire only the owned fixture resources after
+recording results; the ordinary installation is not a test target.
