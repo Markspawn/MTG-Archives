@@ -1,13 +1,14 @@
 import { inventorySortMetadataSelect } from "@/lib/inventory-sort-metadata";
 import { prepareInventoryPageGroups } from "@/lib/inventory-page-groups";
 import { NextResponse } from "next/server";
-import { DefaultCollectionVisibility } from "@prisma/client";
+import { DefaultCollectionVisibility, type Prisma } from "@prisma/client";
 import { getAccessScope, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveInventoryVisibility } from "@/lib/visibility";
 import {
   getInventoryExactPrintings,
   getInventoryGroupedByCard,
+  rollupInventoryPrintingGroups,
   orderInventoryItemsByPageGroups,
 } from "@/lib/inventory-locations";
 import { getManaFacesForDto } from "@/lib/mtg/mana-display";
@@ -40,6 +41,7 @@ function paramsFromUrl(request: Request) {
 function rowsFromDisplayItems({
   displayItems,
   displayMode,
+  rollupPrinting,
   inventoryDefaultByPlayer,
   p,
   filters,
@@ -48,6 +50,7 @@ function rowsFromDisplayItems({
 }: {
   displayItems: any[];
   displayMode: "exact" | "grouped";
+  rollupPrinting: boolean;
   inventoryDefaultByPlayer: Record<string, DefaultCollectionVisibility>;
   p: Record<string, string>;
   filters: ReturnType<typeof parseInventoryFilters>;
@@ -63,6 +66,7 @@ function rowsFromDisplayItems({
         cardName: i.card.name,
         quantity: entry.quantity ?? i.quantity,
         displayMode,
+        rollupPrinting,
         sourceItemIds: i.sourceItemIds ?? [i.id],
         printingCount: entry.printingCount ?? 1,
         locationCount: entry.locationCount ?? i.locationBreakdown?.length ?? 1,
@@ -229,6 +233,7 @@ export async function GET(request: Request) {
   );
   const where = scryfallConstraint.where;
 
+  const rollupPrinting = displayMode === "exact" && !adminModeActive;
   const exactGroupBy = {
     by: [
       "currentOwnerId",
@@ -236,7 +241,7 @@ export async function GET(request: Request) {
       "foilStatus",
       "condition",
       "language",
-    ] as any,
+    ],
     where,
     _sum: { quantity: true as const },
     _count: { _all: true as const },
@@ -246,17 +251,17 @@ export async function GET(request: Request) {
       { foilStatus: "asc" },
       { condition: "asc" },
       { language: "asc" },
-    ] as any,
-  };
+    ],
+  } satisfies Prisma.InventoryItemGroupByArgs;
   const groupedGroupBy = {
-    by: ["cardId"] as any,
+    by: (rollupPrinting ? ["cardId", "foilStatus"] : ["cardId"]),
     where,
     _sum: { quantity: true as const },
     _count: { _all: true as const },
-    orderBy: [{ cardId: "asc" }] as any,
-  };
+    orderBy: [{ cardId: "asc" }],
+  } satisfies Prisma.InventoryItemGroupByArgs;
   const [allGroups, ownerUsers] = await Promise.all([
-    displayMode === "grouped"
+    displayMode === "grouped" || rollupPrinting
       ? prisma.inventoryItem.groupBy(groupedGroupBy)
       : prisma.inventoryItem.groupBy(exactGroupBy),
     prisma.user.findMany({
@@ -264,17 +269,20 @@ export async function GET(request: Request) {
     }),
   ]);
   const inventoryGroupFields =
-    displayMode === "grouped"
+    displayMode === "grouped" || rollupPrinting
       ? ["cardId"]
       : ["currentOwnerId", "cardId", "foilStatus", "condition", "language"];
+  const printingGroups = rollupPrinting
+    ? rollupInventoryPrintingGroups(allGroups)
+    : allGroups;
   const sortableGroups = isInventoryLocationSort(sortField)
     ? await enrichInventoryGroupsForLocationSort(
         prisma,
-        allGroups as any[],
+        printingGroups,
         where,
         inventoryGroupFields,
       )
-    : (allGroups as any[]);
+    : printingGroups;
   const cardSortData = await prisma.card.findMany({
     where: {
       id: {
@@ -292,7 +300,7 @@ export async function GET(request: Request) {
   const { filteredGroups, sortedGroups } = prepareInventoryPageGroups(filteredPrintingGroups, cardSortById, displayMode, sortField, sortDirection);
   const pageGroups = sortedGroups.slice((page - 1) * pageSize, page * pageSize);
   const pageGroupWhere =
-    displayMode === "grouped"
+    displayMode === "grouped" || rollupPrinting
       ? {
           ...where,
           cardId: {
@@ -333,10 +341,10 @@ export async function GET(request: Request) {
   const orderedItems = orderInventoryItemsByPageGroups(
     items,
     pageGroups,
-    displayMode,
+    rollupPrinting ? "grouped" : displayMode,
   );
   const visibilityFilteredItems = orderedItems;
-  const exactItems = getInventoryExactPrintings(visibilityFilteredItems as any);
+  const exactItems = getInventoryExactPrintings(visibilityFilteredItems as any, rollupPrinting);
   const groupedItems = getInventoryGroupedByCard(exactItems as any);
   const displayItems = displayMode === "grouped" ? groupedItems : exactItems;
   const relatedCardsByScryfallId =
@@ -347,6 +355,7 @@ export async function GET(request: Request) {
     rows: rowsFromDisplayItems({
       displayItems,
       displayMode,
+      rollupPrinting,
       inventoryDefaultByPlayer,
       p,
       filters,

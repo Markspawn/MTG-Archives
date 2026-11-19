@@ -352,6 +352,44 @@ test("exact printing groups condition aliases and notes but separates condition,
   assert.equal(nearMint?.sourceItemIds.length, 2);
 });
 
+test("owned inventory rolls up copy attributes and keeps every stack addressable", () => {
+  const rows = getInventoryExactPrintings([
+    makeItem({
+      id: "scan",
+      language: "en",
+      quantity: 2,
+      sourceType: "ACQUISITION",
+      locationSection: "Section 1",
+    }),
+    makeItem({
+      id: "manual",
+      condition: "LP",
+      foilStatus: "FOIL",
+      language: "JA",
+      sourceType: "MANUAL",
+      notes: "Signed",
+    }),
+    makeItem({ id: "different-printing", cardId: "alternate" }),
+  ] as any[], true);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].quantity, 3);
+  assert.deepEqual(rows[0].sourceItemIds, ["scan", "manual"]);
+  assert.deepEqual(
+    rows[0].locationBreakdown.map((stack: {
+      inventoryItemId: string; quantity: number; foilStatus: string; condition: string;
+      language: string; sourceType: string; notes: string | null; section: string | null;
+    }) => [
+      stack.inventoryItemId, stack.quantity, stack.foilStatus, stack.condition,
+      stack.language, stack.sourceType, stack.notes, stack.section,
+    ]),
+    [
+      ["scan", 2, "NONFOIL", "NM", "en", "ACQUISITION", null, "Section 1"],
+      ["manual", 1, "FOIL", "LP", "JA", "MANUAL", "Signed", null],
+    ],
+  );
+});
+
 test("different printings of the same oracle card group into one card-name total", () => {
   const exactRows = getInventoryExactPrintings([
     makeItem({

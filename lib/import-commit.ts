@@ -1,3 +1,4 @@
+import { normalizeInventoryLanguage } from "./inventory-language";
 import {
   FoilStatus,
   InventoryLocationKind,
@@ -169,6 +170,7 @@ export async function commitImportBatch(
       const locationSection = normalizeLocationSection(
         parsedRow.locationSection ?? defaultLocationSection,
       );
+      const language = normalizeInventoryLanguage(parsedRow.language || "EN");
       const matchingWhere = {
         currentOwnerId: batch.selectedPlayerId,
         originalOpenerId: batch.selectedOriginalOpenerId,
@@ -176,7 +178,7 @@ export async function commitImportBatch(
         foil: foilStatus !== FoilStatus.NONFOIL,
         foilStatus,
         condition,
-        language: parsedRow.language || "EN",
+        language,
         locationId,
         locationSection,
         quantity: { gt: 0 },
@@ -193,7 +195,7 @@ export async function commitImportBatch(
         roundId: null,
         notes: parsedRow.notes || null,
         sourceType: InventorySourceType.CSV_PULL_IMPORT,
-        language: parsedRow.language || "EN",
+        language,
         locationId,
         locationSection,
       };
