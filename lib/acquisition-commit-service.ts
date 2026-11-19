@@ -4,6 +4,7 @@ import {
   acquisitionTransaction,
   readAcquisitionRow,
   hydrateAcquisitionRow,
+  getAcquisitionProgress,
   type AcquisitionActor,
 } from "./acquisition-store";
 import {
@@ -20,6 +21,8 @@ import { SCANNER_CAPTURE_PROVIDER } from "./scanner-run-protocol";
 import { lockAndReadInventoryCapacity } from "./inventory-capacity";
 import { writeInventoryReceipt } from "./inventory-receipt";
 import { requireVisibleAcquisitionBatch } from "./acquisition-batch-policy";
+import {z} from "zod";
+import {acquisitionSlotReviewState, acquisitionSlotBlockedReason} from "./acquisition-review-display";
 
 const digest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -62,11 +65,10 @@ async function prepare(
   // can commit. We do not label the entire capture run complete.
   const session = hydrateAcquisitionRow(row).session;
   const allocated = await allocatedAcquisitionCandidates(tx, row.run!.id, row.target, photos.map(photo => photo.slotId));
+  const candidateBySlot = new Map(row.run!.candidates.map(candidate => [candidate.physicalId, candidate]));
   const chosen = photos
     .map((photo) => {
-      const candidate = row.run!.candidates.find(
-        (c) => c.physicalId === photo.slotId,
-      );
+      const candidate = candidateBySlot.get(photo.slotId);
       if (!candidate || candidate.receipt)
         throw new Error("Capture card is already committed or unavailable");
       if (
@@ -115,9 +117,11 @@ async function prepare(
   const openers = openerIds.length ? await tx.player.findMany({
     where: {id: {in: openerIds}}, select: {id: true, displayName: true},
   }) : [];
+  const cardById = new Map(cards.map(card => [card.id, card]));
+  const openerById = new Map(openers.map(opener => [opener.id, opener]));
   if (openers.length !== openerIds.length) throw new Error("An original opener is unavailable; review the affected cards");
   for (const { decision } of chosen) {
-    const card = cards.find((c) => c.id === decision.cardId);
+    const card = cardById.get(decision.cardId);
     if (
       !card ||
       card.digital ||
@@ -146,7 +150,7 @@ async function prepare(
     ownerPlayerId: row.ownerPlayerId,
     destination,
     cards: chosen.map(({ candidate, photo, decision }) => {
-      const card = cards.find((c) => c.id === decision.cardId)!;
+      const card = cardById.get(decision.cardId)!;
       return {
         candidateId: candidate.id,
         candidateRevision: candidate.revision,
@@ -178,7 +182,7 @@ async function prepare(
       setCode: c.setCode,
       collectorNumber: c.collectorNumber,
       ...c.decision,
-      ...(c.decision.openerPlayerId ? {openerName: openers.find(p => p.id === c.decision.openerPlayerId)!.displayName} : {}),
+      ...(c.decision.openerPlayerId ? {openerName: openerById.get(c.decision.openerPlayerId)!.displayName} : {}),
     })),
   };
   return { preview, facts, chosen };
@@ -202,6 +206,29 @@ export async function previewAcquisitionCommit(
         )
       ).preview,
   );
+}
+
+/** Read bounded review pages, then freeze/revalidate exactly those cards using
+ * the ordinary preview. New confirmations never join an already approved set. */
+export async function previewConfirmedAcquisitionCommit(db: PrismaClient, actor: AcquisitionActor, sessionId: string, raw: unknown) {
+  const input = z.object({locationId:z.string().min(1).max(200), section:z.string().trim().max(100),
+    excludedPhotoIds:z.array(z.string().uuid())}).strict().parse(raw);
+  const excluded = new Set(input.excludedPhotoIds), photoIds: string[] = [], reasons = new Map<string,number>();
+  const addReason = (reason: string) => reasons.set(reason,(reasons.get(reason) ?? 0)+1);
+  for (let page=0; ; page++) {
+    const progress = await getAcquisitionProgress(db,actor,sessionId,page);
+    for (const slot of progress.slots) {
+      if (slot.committed || !slot.review) continue;
+      const photo = slot.photos.find(photo => photo.ready && !photo.purgedAt && photo.generation===slot.generation);
+      if (slot.photos.some(photo => excluded.has(photo.id))) addReason("Unsaved corrections");
+      else if (acquisitionSlotReviewState(slot) !== "ready") addReason(acquisitionSlotBlockedReason(slot));
+      else if (photo) photoIds.push(photo.id);
+    }
+    if (page+1 >= progress.pagination.pages) break;
+  }
+  if (!photoIds.length) throw new Error("Choose complete confirmed cards without unsaved corrections or physical reconciliation before adding to Inventory.");
+  const preview = await previewAcquisitionCommit(db,actor,sessionId,{photoIds,locationId:input.locationId,section:input.section});
+  return {...preview,scope:"confirmed" as const,excluded:[...reasons].map(([reason,count])=>({reason,count}))};
 }
 function receiptDto(
   row: { id: string; createdAt: Date; snapshot: Prisma.JsonValue },
@@ -255,10 +282,12 @@ export async function commitAcquisitionCards(
     const groups = new Map<string, typeof chosen>();
     for (const card of chosen) {
       const key = JSON.stringify({...card.decision, openerPlayerId: card.decision.openerPlayerId ?? null});
-      groups.set(key, [...(groups.get(key) ?? []), card]);
+      const group = groups.get(key);
+      if (group) group.push(card); else groups.set(key,[card]);
     }
     const memberships: Prisma.AcquisitionCommitMemberCreateManyInput[] = [];
     const inventoryItemIds: string[] = [];
+    const factsByCandidate = new Map(facts.cards.map(card => [card.candidateId,card]));
     for (const group of groups.values()) {
       const d = group[0].decision;
       const result = await writeInventoryReceipt(tx, {
@@ -301,7 +330,7 @@ export async function commitAcquisitionCards(
           inventoryItemId: result.inventory.id,
           snapshot: JSON.parse(
             JSON.stringify(
-              facts.cards.find((c) => c.candidateId === item.candidate.id),
+              factsByCandidate.get(item.candidate.id),
             ),
           ),
         });

@@ -54,6 +54,7 @@ for (const {width,count} of cases) test(`filtered ${count}-card review reaches a
       await route.fulfill({json: {...record, suggestions: [{printing, reasons: ["Controlled UI fixture"]}]}});
     });
     await page.goto(`/imports/scan?batch=${batch}`);
+    await page.getByRole("button", {name: "Two-column list", exact: true}).click();
     const first = page.getByTestId("capture-card-1"), target = page.getByTestId(`capture-card-${count}`);
     const filter = page.getByRole("combobox", {name: "Show cards", exact: true});
     await filter.selectOption("ready"); await first.scrollIntoViewIfNeeded();

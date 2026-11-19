@@ -55,8 +55,13 @@ export default async function ScanPage({
       </div>
       <ImportTaskNav selected={photoInput ?? "scan"} />
       <a className="underline text-sm inline-block" href="/imports/corrections">Correction photos</a>
-      {!photoInput && <p role="note" className="rounded border border-amber-500 p-3 text-sm">fi-7160 count control requires helper 0.4.2 and the Cards profile with Pre-Pick Off. Use expendable cards until your setup passes a supervised test.</p>}
-      {!photoInput && <ScannerConnections newBatchHref="/imports/scan?input=scanner#new-scan-batch" />}
+      {!photoInput && <details open={!initialBatch} className="min-w-0">
+        <summary className="cursor-pointer text-sm font-medium">Scanner connection &amp; setup</summary>
+        <div className="space-y-3 mt-3">
+          <p role="note" className="text-sm">fi-7160 count control requires helper 0.4.2 or later and the Cards profile with Pre-Pick Off.</p>
+          <ScannerConnections newBatchHref="/imports/scan?input=scanner#new-scan-batch" />
+        </div>
+      </details>}
       <AcquisitionCapture
         key={initialBatch || initialSetup?.continueFrom || photoInput || "new"}
         userId={user.id}

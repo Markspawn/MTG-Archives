@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StorageDestinationPicker } from "./StorageDestinationPicker";
 import type { StorageLocation } from "@/lib/storage-sections";
 import type { acquisitionProgressDto } from "@/lib/acquisition-api";
@@ -39,6 +39,8 @@ export function AcquisitionCommitControls({
   blockedPhotos,
   draftsReady,
   canUsePhotos,
+  previewRequest,
+  onDestinationChange,
 }: {
   progress: Progress;
   locations: StorageLocation[];
@@ -48,6 +50,8 @@ export function AcquisitionCommitControls({
   blockedPhotos: Set<string>;
   draftsReady: boolean;
   canUsePhotos: (ids: string[]) => boolean;
+  previewRequest?: {id: number; all: boolean};
+  onDestinationChange?: (locationId: string, section: string) => void;
 }) {
   const [locationId, setLocationId] = useState(progress.locationId),
     [section, setSection] = useState(progress.section);
@@ -60,6 +64,17 @@ export function AcquisitionCommitControls({
   const [receipt, setReceipt] = useState<AcquisitionCommitReceipt | null>(null);
   const pending = useRef<Record<string, unknown> | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [allConfirmed, setAllConfirmed] = useState(true);
+  const [detailCount, setDetailCount] = useState(100);
+  const handledRequest = useRef(0);
+  useEffect(() => { onDestinationChange?.(locationId,section); }, [locationId,section,onDestinationChange]);
+  // The parent issues an explicit user action. Never re-preview because polling
+  // or selection changed; an approval is bound to the frozen returned cards.
+  useEffect(() => {
+    if (!previewRequest || !draftsReady || handledRequest.current === previewRequest.id) return;
+    handledRequest.current = previewRequest.id;
+    void prepare(selected,previewRequest.all);
+  });
   const reviewed = progress.slots.flatMap((s) =>
     !s.committed && s.review && s.photos[0]?.ready ? [s.photos[0].id] : [],
   );
@@ -68,7 +83,8 @@ export function AcquisitionCommitControls({
   const eligible = ready.filter(id => !blockedPhotos.has(id));
   const skipped = reviewed.filter(id => blockedPhotos.has(id)).length;
   const physicalPending = reviewed.filter(id => !ready.includes(id)).length;
-  const selectedBlocked = !draftsReady || selected.some(id => !eligible.includes(id));
+  const selectedBlocked = !draftsReady || selected.some(id => blockedPhotos.has(id) ||
+    (preview?.scope !== "confirmed" && !eligible.includes(id)));
   const stopped = ["STOPPING", "COMPLETE", "CANCELLED"].includes(
     progress.phase,
   );
@@ -82,29 +98,33 @@ export function AcquisitionCommitControls({
     pending.current = null;
     setRetrying(false);
   }
-  async function prepare(photoIds = selected) {
-    if (pending.current) return; // An unknown acknowledgement retains its identity.
-    if (photoIds.some(id => !ready.includes(id))) {
+  async function prepare(photoIds = selected, all = false) {
+    if (pending.current || busy) return; // An unknown acknowledgement retains its identity.
+    if (!all && photoIds.some(id => !ready.includes(id))) {
       setError("Selected cards are pending review or physical reconciliation. Refresh and select ready cards."); return;
     }
-    if (!canUsePhotos(photoIds)) {
+    if (!all && !canUsePhotos(photoIds)) {
       setError("Save or cancel selected corrections before previewing Inventory."); return;
     }
     setBusy(true);
     setError("");
     setReceipt(null);
+    setAllConfirmed(all);
+    setDetailCount(100);
     resetPreview();
     try {
       const result = await post<AcquisitionCommitPreview>(progress.id, {
-        action: "preview",
-        photoIds,
+        action: all ? "preview-confirmed" : "preview",
+        ...(all ? {excludedPhotoIds:[...blockedPhotos]} : {photoIds}),
         locationId,
         section,
       });
-      if (!canUsePhotos(photoIds)) {
+      const frozenIds = result.cards.map(card=>card.photoId);
+      if (!canUsePhotos(frozenIds)) {
         setError("A selected correction changed during the preview. Save or cancel it, then preview again."); return;
       }
-      setPreviewSelection([...photoIds]);
+      if (all) onSelect(frozenIds);
+      setPreviewSelection(frozenIds);
       setPreview(result);
     } catch (e) {
       setError((e as Error).message);
@@ -154,22 +174,25 @@ export function AcquisitionCommitControls({
       className={panel + " space-y-3"}
       aria-label="Add reviewed cards to Inventory"
     >
-      <h3 className="font-semibold">Add reviewed cards to Inventory</h3>
+      <h3 className="text-xl font-semibold">Confirm Inventory addition</h3>
       <p className="text-sm">
-        Review the destination, then add your confirmed matches. Unselected and
-        unfinished cards stay in this batch. Each selected photo adds one copy.
+        {allConfirmed ? "Only confirmed cards from this batch are included." : "Only your chosen cards are included."}
+        {" "}Pending cards and unsaved corrections stay here.
       </p>
-      <p role="status">
+      {!allConfirmed && <p role="status">
         {selected.length} selected ·{" "}
         {progress.slots.filter((s) => s.committed).length} already added
-      </p>
-      <div className="flex flex-wrap gap-2">
+      </p>}
+      <p className="text-lg" data-testid="inventory-destination">Save to <strong>{locations.find(location => location.id === locationId)?.name ?? "Choose a box"}</strong>{" → "}<strong>{section || "No section"}</strong></p>
+      {busy && !retrying && <p role="status">Preparing your confirmation…</p>}
+      <details><summary className="cursor-pointer text-sm">Choose specific cards instead</summary>
+      <div className="flex flex-wrap gap-2 mt-2">
         <button
           type="button"
           className={button}
           disabled={busy || retrying || !draftsReady || !eligible.length}
           onClick={() => {
-            onSelect(eligible.slice(0, 500));
+            onSelect(eligible); setAllConfirmed(false);
             resetPreview();
           }}
         >
@@ -187,17 +210,14 @@ export function AcquisitionCommitControls({
           Clear selection
         </button>
       </div>
+      <button className={button + " mt-2"} disabled={busy || retrying || selectedBlocked || !stopped || !selected.length || !locationId}
+        onClick={()=>void prepare()}>Preview selected cards</button>
+      </details>
       {!draftsReady && <p role="status" className="text-sm">Inventory selection is waiting for browser draft access. Allow browser storage and reload; individual reviews can still be saved.</p>}
       {skipped > 0 && <p role="status" className="text-sm">{skipped} reviewed {skipped === 1 ? "card is" : "cards are"} excluded because of unsaved corrections. Save or cancel them to include them.</p>}
-      {physicalPending > 0 && <p role="status" className="text-sm">{physicalPending} saved reviews remain pending. Check their review or physical reconciliation explanations before continuing.</p>}
+      {!allConfirmed && physicalPending > 0 && <p role="status" className="text-sm">{physicalPending} saved reviews remain pending. Check their review or physical reconciliation explanations before continuing.</p>}
       {selectedBlocked && selected.length > 0 && !retrying && <p role="status" className="text-sm">Selected cards include unsaved corrections or pending review or reconciliation. Resolve them before adding, or clear the selection and select ready cards.</p>}
       {retrying && <p role="status" className="text-sm">Recover the original Inventory addition before changing its selection or destination. Retry uses the same saved reviews and request.</p>}
-      {eligible.length > 500 && (
-        <p className="text-sm">
-          Add up to 500 cards per confirmation; the rest stay ready for the next
-          one.
-        </p>
-      )}
       {!stopped && (
         <p className="text-sm">
           Stop capture when you are ready to add cards. Uploads already in
@@ -205,8 +225,7 @@ export function AcquisitionCommitControls({
 
         </p>
       )}
-      <p className="text-sm"><a className="underline" href="#scan-capture">Go to capture controls</a></p>
-      <p className="text-sm">Destination: <strong>{locations.find(location => location.id === locationId)?.name ?? "Choose a location"}{section ? ` · ${section}` : ""}</strong></p>
+      {!stopped && <p className="text-sm"><a className="underline" href="#scan-capture">Go to capture controls</a></p>}
       <details open={!locationId}>
       <summary className="cursor-pointer text-sm">Change destination</summary>
       <StorageDestinationPicker
@@ -224,29 +243,13 @@ export function AcquisitionCommitControls({
         }}
       />
       </details>
-      {!selected.length && eligible.length > 0 && <button className={primary} disabled={busy || retrying || !draftsReady || !stopped || !locationId}
-        onClick={() => { const ids = eligible.slice(0, 500); onSelect(ids); void prepare(ids); }}>
-        Review {Math.min(eligible.length, 500)} confirmed {eligible.length === 1 ? "card" : "cards"} for Inventory
-      </button>}
-      <button
-        className={button}
-        disabled={
-          busy ||
-          retrying ||
-          selectedBlocked ||
-          !stopped ||
-          !selected.length ||
-          !locationId ||
-          selected.length > 500
-        }
-        onClick={() => void prepare()}
-      >
-        Preview selected cards
-      </button>
+      {!preview && !receipt && <button className={primary} disabled={busy || retrying || !draftsReady || !stopped || !locationId}
+        onClick={()=>void prepare(selected,true)}>Prepare all confirmed cards</button>}
       {preview && (sameSelection || retrying) && (
         <div
           className="space-y-3 border rounded p-3"
           aria-label="Confirm Inventory addition"
+          role="region"
         >
           <p>
             Add{" "}
@@ -259,6 +262,25 @@ export function AcquisitionCommitControls({
               : ""}
             .
           </p>
+          <button
+            className={primary}
+            disabled={
+              busy ||
+              (!retrying && selectedBlocked) ||
+              (!!preview.overfill &&
+                (!confirmOverfill || reason.trim().length < 3))
+            }
+            onClick={() => void commit()}
+          >
+            {busy
+              ? "Adding..."
+              : retrying
+                ? "Retry Inventory addition"
+                : `Add ${preview.count} ${preview.count === 1 ? "copy" : "copies"} to Inventory`}
+          </button>
+          {!!preview.excluded?.length && <div className="text-sm" role="status">
+            <p>Not included:</p><ul>{preview.excluded.map(item=><li key={item.reason}>{item.count} · {item.reason}</li>)}</ul>
+          </div>}
           <p className="text-sm">
             Location: {preview.destination.totalQuantity} currently stored
             {preview.destination.totalCapacity === null
@@ -275,7 +297,7 @@ export function AcquisitionCommitControls({
               Check selected card details
             </summary>
             <ul className="text-sm max-h-52 overflow-y-auto break-words">
-              {preview.cards.map((c) => (
+              {preview.cards.slice(0,detailCount).map((c) => (
                 <li key={c.photoId}>
                   Card {c.position + 1}: {c.name} ({c.setCode} #
                   {c.collectorNumber}) · {c.finish.toLowerCase()} ·{" "}
@@ -283,6 +305,7 @@ export function AcquisitionCommitControls({
                 </li>
               ))}
             </ul>
+            {detailCount < preview.cards.length && <button type="button" className={button} onClick={()=>setDetailCount(count=>count+100)}>Show more card details</button>}
           </details>
           {!!preview.overfill && (
             <div className="space-y-2">
@@ -318,22 +341,7 @@ export function AcquisitionCommitControls({
             adding. Completed or trashed batches may be permanently removed sooner
             when scan-photo storage approaches its limit; pending cards keep their photos.
           </p>
-          <button
-            className={primary}
-            disabled={
-              busy ||
-              (!retrying && selectedBlocked) ||
-              (!!preview.overfill &&
-                (!confirmOverfill || reason.trim().length < 3))
-            }
-            onClick={() => void commit()}
-          >
-            {busy
-              ? "Adding..."
-              : retrying
-                ? "Retry Inventory addition"
-                : `Add ${preview.count} ${preview.count === 1 ? "copy" : "copies"} to Inventory`}
-          </button>
+
         </div>
       )}
       {preview && !sameSelection && !retrying && (

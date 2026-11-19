@@ -15,12 +15,14 @@ export function AcquisitionScanImage({
   active,
   position,
   compact = false,
+  expanded = false,
 }: {
   src: string;
   evidence: AcquisitionReviewEvidence;
   active: boolean;
   position: number;
   compact?: boolean;
+  expanded?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [activated, setActivated] = useState(active);
@@ -145,8 +147,8 @@ export function AcquisitionScanImage({
           source.width,
           source.height,
         ).data;
-        target.width = compact ? 320 : 400;
-        target.height = compact ? 447 : 559;
+        target.width = compact && !expanded ? 320 : 400;
+        target.height = compact && !expanded ? 447 : 559;
         const out = ctx.createImageData(target.width, target.height);
         for (let y = 0; y < target.height; y++)
           for (let x = 0; x < target.width; x++) {
@@ -238,6 +240,7 @@ export function AcquisitionScanImage({
     displayView,
     rotation,
     compact,
+    expanded,
   ]);
   return (
     <figure className="min-w-0">

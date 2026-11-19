@@ -37,6 +37,7 @@ for (const width of [1366, 390, 320]) test(`300-card review, six themes and comp
     const originals = reviewSourceState(fixture.batch);
     writeFileSync(test.info().outputPath("originals-before.json"), JSON.stringify(originals));
     await page.goto(`/imports/scan?batch=${fixture.batch}`);
+    await page.getByRole("button", {name: "Two-column list", exact: true}).click();
     const first = page.getByTestId("capture-card-1"), uncertain = page.getByTestId("capture-card-2"), last = page.getByTestId("capture-card-300");
     const summary = page.getByTestId("scan-review-summary"), filter = page.getByRole("combobox", { name: "Show cards", exact: true });
     await expect(summary).toContainText("2 pending review or reconciliation");
