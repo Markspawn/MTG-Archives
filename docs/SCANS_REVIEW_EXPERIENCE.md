@@ -32,3 +32,27 @@ schema, ownership/privacy rule or Inventory acceptance rule changes are planned.
 Existing performance delivery is PR #1048; issue #1004 retains its separate
 affected-installation timing criteria. No new issue is created without verified
 cross-node intake coordination.
+
+## Author verification
+
+The final compiled product is source-bound to 56cc3e6b. The production build,
+TypeScript, changed-file lint, 47 focused draft/navigation/readiness/reload/finish
+controls and three complete browser cases (1366, 390 and 320 pixels) pass.
+Browser coverage includes both layouts, retained corrections across navigation,
+view changes and reload, rejected-save non-advancement, actual acknowledged saves,
+original opener/finish preservation, empty filters, final-card handling, sticky
+control clearance, unchanged original metadata and zero Inventory additions.
+
+The first browser run used an incorrect dropdown selector; it is preserved as a
+harness failure. The second exposed a real phone overlap when a successful save
+added an Inventory action to the sticky toolbar. Resize observation now keeps
+only the focused card row clear, without repositioning an active field. All three
+widths pass after that correction. Synthetic fixture setup errors are retained
+separately. This establishes UI/manual-review behavior, not optical accuracy,
+physical operation, production timing or independent user acceptance.
+
+PR #1049 carries final-head CI and review status. Later changes are test coverage
+and this evidence only; compiled product inputs remain identical. The stopped
+local review app/database, compiled image and synthetic originals are retained;
+temporary build/browser containers and two superseded images were retired and
+the exact runtime owner released. The primary local installation was preserved.

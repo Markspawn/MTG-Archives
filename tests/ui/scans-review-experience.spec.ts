@@ -46,6 +46,8 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   await page.screenshot({path:`test-results/scans-overview-${width}.png`,fullPage:false});
   await first.getByRole("button",{name:"Focus card 1",exact:true}).click();
   await expect(first.getByRole("combobox",{name:"Card condition",exact:true})).toHaveValue("LP");
+  await page.reload(); await first.scrollIntoViewIfNeeded();
+  await expect(first.getByRole("combobox",{name:"Card condition",exact:true})).toHaveValue("LP");
   // A rejected save keeps the selected card, draft and physical order.
   let reject=true;
   await page.route(`**${endpoint}`,async route=>{
@@ -88,6 +90,9 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   await page.getByRole("button",{name:"Batch settings",exact:true}).click();
   await expect(page.getByRole("button",{name:"Save batch defaults",exact:true})).toBeVisible();
   await page.getByRole("link",{name:"Review saved cards",exact:true}).click();
+  await page.getByRole("combobox",{name:"Jump to card",exact:true}).selectOption(f.slots[12]);
+  await page.getByRole("button",{name:"Next card",exact:true}).click();
+  await expect.poll(()=>page.getByTestId("capture-card-14").locator("canvas").evaluate((el:HTMLCanvasElement)=>el.width)).toBeGreaterThan(0);
   await page.screenshot({path:`test-results/scans-focus-${width}.png`,fullPage:false});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(database(`return p.inventoryItem.count({where:{currentOwnerId:${JSON.stringify(f.user)}}});`)).toBe(0);

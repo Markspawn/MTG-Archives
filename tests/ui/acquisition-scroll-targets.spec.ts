@@ -73,7 +73,9 @@ for (const width of [1366, 320]) test(`scan jumps clear changing sticky progress
         await route.fulfill({ json: { ...record, suggestions: [{ printing, reasons: ["Controlled layout proposal"] }] } });
       } catch (error) { if (!closing && epoch === navigation && !cancelled.has(request)) throw error; }
     });
-    await page.goto(`/imports/scan?batch=${batch}`); await page.evaluate(() => document.fonts.ready);
+    await page.goto(`/imports/scan?batch=${batch}`);
+    await page.getByRole("button", {name: "Two-column list", exact: true}).click();
+    await page.evaluate(() => document.fonts.ready);
     const summary = page.getByRole("region", { name: "Batch progress", exact: true });
     const bulk = page.getByRole("region", { name: "Bulk match review", exact: true });
     await bulk.getByRole("button", { name: "Bulk Confirm Match", exact: true }).click();
