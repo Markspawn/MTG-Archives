@@ -1,3 +1,4 @@
+import { normalizeInventoryLanguage } from "./inventory-language";
 import { type InventoryItem, type Prisma } from "@prisma/client";
 import {
   recordInventoryAudit,
@@ -58,7 +59,10 @@ export async function writeInventoryReceipt(
     emptyBefore?: Prisma.InputJsonObject;
   },
 ): Promise<InventoryReceiptResult> {
-  const { lot } = input;
+  const lot = {
+    ...input.lot,
+    language: normalizeInventoryLanguage(input.lot.language),
+  };
   if (
     !Number.isSafeInteger(lot.quantity) ||
     lot.quantity <= 0 ||

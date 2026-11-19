@@ -1,3 +1,4 @@
+import { normalizeInventoryLanguage } from "./inventory-language";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { importTransaction } from "./import-commit";
 import { recordInventoryAudit } from "./inventory-audit";
@@ -69,26 +70,29 @@ export async function undoInventoryImport(
       });
       const receiptAfter = ownReceipt?.afterJson as
         Prisma.JsonObject | undefined;
+      const receiptLanguage = receiptAfter?.language;
+      const canonicalReceiptLanguage =
+        typeof receiptLanguage === "string"
+          ? normalizeInventoryLanguage(receiptLanguage)
+          : receiptLanguage;
       const attributesChanged =
         inventory &&
         receiptAfter &&
-        (
-          [
+        (normalizeInventoryLanguage(inventory.language) !== canonicalReceiptLanguage ||
+          ([
             "currentOwnerId",
             "originalOpenerId",
             "cardId",
             "foil",
             "foilStatus",
             "condition",
-            "language",
             "locationId",
             "locationSection",
             "acquiredFromPullId",
             "roundId",
             "notes",
             "sourceType",
-          ] as const
-        ).some((key) => inventory[key] !== receiptAfter[key]);
+          ] as const).some((key) => inventory[key] !== receiptAfter[key]));
       if (
         !inventory ||
         item.pullId ||

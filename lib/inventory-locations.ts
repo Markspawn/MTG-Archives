@@ -467,6 +467,7 @@ export function orderInventoryItemsByPageGroups<
 
 export function getInventoryExactPrintings<T extends InventoryWithCardLocation>(
   items: T[],
+  rollupPrinting = false,
 ) {
   const groups = new Map<
     string,
@@ -478,7 +479,7 @@ export function getInventoryExactPrintings<T extends InventoryWithCardLocation>(
   >();
   for (const item of items) {
     const normalizedCondition = normalizeInventoryCondition(item.condition);
-    const key = [
+    const key = rollupPrinting ? item.cardId : [
       item.currentOwnerId,
       item.cardId,
       item.foilStatus,
@@ -495,6 +496,7 @@ export function getInventoryExactPrintings<T extends InventoryWithCardLocation>(
       condition: normalizedCondition,
       language: item.language,
       sourceType: item.sourceType,
+      notes: item.notes ?? null,
       locationKind: (item.location as any)?.kind ?? null,
       locationActive: (item.location as any)?.active ?? null,
       locationSystemManaged: (item.location as any)?.systemManaged ?? null,
@@ -513,9 +515,6 @@ export function getInventoryExactPrintings<T extends InventoryWithCardLocation>(
       existing.quantity += item.quantity;
       existing.sourceItemIds.push(item.id);
       existing.locationBreakdown.push(loc);
-      existing.locationSummary = locationSummary(
-        aggregateLocationBreakdown(existing.locationBreakdown),
-      );
     }
   }
   return Array.from(groups.values()).map((row) => ({
@@ -560,6 +559,32 @@ export function normalizedCardGroupKey(card: {
     card.oracleId ||
     `name:${card.name.trim().toLowerCase().replace(/\s+/g, " ")}`
   );
+}
+
+type InventoryPrintingGroup = {
+  cardId: string;
+  foilStatus?: string;
+  _sum: { quantity: number | null };
+  _count: { _all: number };
+};
+
+export function rollupInventoryPrintingGroups(groups: InventoryPrintingGroup[]) {
+  const totals = new Map<string, InventoryPrintingGroup>();
+  for (const group of groups) {
+    const total = totals.get(group.cardId);
+    if (!total) {
+      totals.set(group.cardId, {
+        ...group,
+        _sum: { ...group._sum },
+        _count: { ...group._count },
+      });
+      continue;
+    }
+    total._sum.quantity = (total._sum.quantity ?? 0) + (group._sum.quantity ?? 0);
+    total._count._all += group._count._all;
+    if (total.foilStatus !== group.foilStatus) total.foilStatus = "MIXED";
+  }
+  return Array.from(totals.values());
 }
 
 export function groupInventoryPageGroupsByCardName<
