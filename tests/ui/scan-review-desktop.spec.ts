@@ -92,3 +92,32 @@ for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:19
   await testInfo.attach("frame-geometry",{body:JSON.stringify({viewport,frames,media}),contentType:"application/json"});
  });
 }
+
+test("pending two-column reviews keep Confirm and Correct visible on a laptop",async({page,baseURL},testInfo)=>{
+  test.setTimeout(90000);expect(baseURL).toBe("http://127.0.0.1:13295");
+  const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
+  database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:require('@prisma/client').Prisma.DbNull,revision:{increment:1}}});`);
+  await page.setViewportSize({width:1280,height:720});
+  await page.context().addCookies([{name:"mtg_inventory_session",value:f.token,url:baseURL!,httpOnly:true,sameSite:"Lax"}]);
+  await page.route(`**/api/acquisition/${f.batch}/review?photoId=*`,async route=>{
+    const response=await route.fetch(),record=await response.json();
+    await route.fulfill({response,json:{...record,recognitionStatus:"NO_MATCH",visualStatus:"COMPLETE",printingStatus:"COMPLETE",catalog:null,
+      suggestions:[{printing:f.printing,reasons:["UNLOCALIZED_NAME_HINT"]}],
+      evidence:{geometry:{status:"MISSING"},rotation:null,observations:[],...record.evidence,identifiers:{...record.evidence?.identifiers,languages:["fr"]}}}});
+  });
+  await page.goto(`/imports/scan?batch=${f.batch}`);
+  await page.getByRole("button",{name:"Two-column list",exact:true}).click();
+  await page.getByRole("link",{name:"Review saved cards",exact:true}).click();
+  for(const number of [1,2]){
+    const card=page.getByTestId(`capture-card-${number}`);
+    for(const name of ["Confirm match","Correct"]){
+      const button=card.getByRole("button",{name,exact:true});await expect(button).toBeEnabled();
+      expect(await button.evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+    }
+    const frames=await card.locator('[data-testid$="comparison-frame"]').evaluateAll(elements=>elements.map(e=>{const r=e.getBoundingClientRect();return {w:r.width,h:r.height,y:r.y,bottom:r.bottom}}));
+    expect(Math.abs(frames[0].w-frames[1].w)).toBeLessThan(1);expect(Math.abs(frames[0].h-frames[1].h)).toBeLessThan(1);expect(Math.abs(frames[0].y-frames[1].y)).toBeLessThan(1);
+    expect(Math.max(...frames.map(r=>r.bottom))).toBeLessThanOrEqual(720);
+  }
+  await page.screenshot({path:testInfo.outputPath("pending-two-column-laptop.png")});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
