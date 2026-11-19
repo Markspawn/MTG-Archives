@@ -155,10 +155,15 @@ export function AcquisitionCapture({
   const photoMatches = useMemo(() => new Map(progress?.photoMatches?.map(match => [match.slotId, match.count]) ?? []), [progress?.photoMatches]);
   const captureRoot = useRef<HTMLDivElement>(null);
   const progressPanel = useRef<HTMLElement>(null);
+  const cardNavigator = useRef<HTMLDivElement>(null);
   const hasProgress = Boolean(progress);
   const measureScrollOffset = useCallback(() => {
     const summary = progressPanel.current;
-    if (summary) captureRoot.current?.style.setProperty("--scan-scroll-offset", `${Math.ceil(summary.getBoundingClientRect().height) + 16}px`);
+    if (summary) {
+      const height = Math.ceil(summary.getBoundingClientRect().height);
+      captureRoot.current?.style.setProperty("--scan-toolbar-offset", `${height + 8}px`);
+      captureRoot.current?.style.setProperty("--scan-scroll-offset", `${height + (cardNavigator.current?.getBoundingClientRect().height ?? 0) + 24}px`);
+    }
   }, []);
   useLayoutEffect(() => {
     const summary = progressPanel.current;
@@ -204,6 +209,18 @@ export function AcquisitionCapture({
   const [visibleCount, setVisibleCount] = useState(12);
   const [reviewMode, setReviewMode] = useState<AcquisitionReviewMode>("simple");
   const [reviewLayout, setReviewLayout] = useState<"focus" | "list">("focus");
+  useLayoutEffect(() => {
+    measureScrollOffset();
+    const navigator = cardNavigator.current;
+    if (!navigator) return;
+    const observer = new ResizeObserver(measureScrollOffset);
+    observer.observe(navigator);
+    return () => observer.disconnect();
+  }, [reviewLayout, hasProgress, measureScrollOffset]);
+  function chooseReviewLayout(layout: "focus" | "list") {
+    setReviewLayout(layout);
+    try { localStorage.setItem(`mtg-acquisition-review-layout:${userId}`, layout); } catch { /* Session remains usable. */ }
+  }
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
   const [visitedSlots, setVisitedSlots] = useState<Set<string>>(() => new Set());
   const [busyReviews, setBusyReviews] = useState<Set<string>>(() => new Set());
@@ -257,7 +274,7 @@ export function AcquisitionCapture({
   const focusedSlot = progress?.slots.find(slot => slot.id === focusedSlotId) ?? filteredSlots[0];
   const focusedId = focusedSlot?.id;
   const focusedIndex = filteredSlots.findIndex(slot => slot.id === focusedSlot?.id);
-  const renderedSlots = (progress?.slots ?? []).filter(slot =>
+  const renderedSlots = reviewLayout === "list" ? shownSlots : (progress?.slots ?? []).filter(slot =>
     shownSlots.includes(slot) || visitedSlots.has(slot.id) || slot.id === focusedSlot?.id);
   useEffect(() => {
     if (reviewLayout !== "focus" || !focusedId) return;
@@ -1167,8 +1184,7 @@ export function AcquisitionCapture({
                   {(["focus", "list"] as const).map(layout => <button key={layout} type="button"
                     className={reviewLayout === layout ? primary : button} aria-pressed={reviewLayout === layout}
                     disabled={busyReviews.size > 0} onClick={() => {
-                      setReviewLayout(layout);
-                      try { localStorage.setItem(`mtg-acquisition-review-layout:${userId}`, layout); } catch { /* Session remains usable. */ }
+                      chooseReviewLayout(layout);
                     }}>{layout === "focus" ? "Focused review" : "Two-column list"}</button>)}
                 </div>
               </div>
@@ -1275,7 +1291,9 @@ export function AcquisitionCapture({
                 </p>
               )}
               {reviewNavigation && <p role="status" className="text-sm mb-3">{reviewNavigation}</p>}
-              {reviewLayout === "focus" && <div className="min-w-0 mb-4 space-y-3" aria-label="Card navigator">
+              {reviewLayout === "focus" && <div ref={cardNavigator}
+                className="min-w-0 mb-4 py-2 space-y-3 sticky top-[var(--scan-toolbar-offset,10rem)] z-10"
+                style={{background:"var(--app-surface)"}} aria-label="Card navigator">
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" className={button} disabled={busyReviews.size > 0 || focusedIndex <= 0}
                     onClick={() => revealCard(filteredSlots[focusedIndex - 1].position)}>Previous card</button>
@@ -1328,7 +1346,7 @@ export function AcquisitionCapture({
                         Card {slot.position + 1}
                         {photo?.inputKind === "CARD_SCAN" ? " · Card scan" : ""}
                         {reviewLayout === "list" && <button type="button" className={button + " ml-2 text-sm"}
-                          disabled={busyReviews.size > 0} onClick={() => { setReviewLayout("focus"); revealCard(slot.position); }}>
+                          disabled={busyReviews.size > 0} onClick={() => { chooseReviewLayout("focus"); revealCard(slot.position); }}>
                           Focus card {slot.position + 1}
                         </button>}
                       </p>

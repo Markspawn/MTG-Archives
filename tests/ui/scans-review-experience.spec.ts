@@ -2,7 +2,7 @@ import {test, expect} from "@playwright/test";
 import {execFileSync} from "node:child_process";
 
 test.skip(process.env.MTG_SCANS_EXPERIENCE_TEST !== "1", "Owned disposable scan-review fixture required");
-test.use({video: "off"});
+test.use({video: "off", actionTimeout: 15000});
 function database(body: string) {
   const container = process.env.MTG_INVENTORY_TEST_CONTAINER ?? "";
   if (!/^[a-f0-9]{64}$/.test(container)) throw Error("Immutable owned review container required");
@@ -33,18 +33,18 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   await expect(first.getByRole("img",{name:/Printing:/})).toBeVisible();
   await expect.poll(()=>first.locator("canvas").evaluate((el:HTMLCanvasElement)=>el.width)).toBeGreaterThan(0);
   await first.getByRole("button",{name:"Correct",exact:true}).click();
-  await first.getByLabel("Card condition",{exact:true}).selectOption("LP");
+  await first.getByRole("combobox",{name:"Card condition",exact:true}).selectOption("LP");
   await page.getByRole("button",{name:"Next card",exact:true}).click();
   await expect(second).toBeVisible(); await expect(first).toBeHidden();
   await page.getByRole("button",{name:"Previous card",exact:true}).click();
-  await expect(first.getByLabel("Card condition",{exact:true})).toHaveValue("LP");
+  await expect(first.getByRole("combobox",{name:"Card condition",exact:true})).toHaveValue("LP");
   await page.getByRole("button",{name:"Two-column list",exact:true}).click();
   await expect(first).toBeVisible(); await expect(second).toBeVisible();
   const a=await first.boundingBox(),b=await second.boundingBox();
   expect(Math.abs(a!.y-b!.y)<5).toBe(width>=1024);
   await page.screenshot({path:`test-results/scans-overview-${width}.png`,fullPage:false});
   await first.getByRole("button",{name:"Focus card 1",exact:true}).click();
-  await expect(first.getByLabel("Card condition",{exact:true})).toHaveValue("LP");
+  await expect(first.getByRole("combobox",{name:"Card condition",exact:true})).toHaveValue("LP");
   // A rejected save keeps the selected card, draft and physical order.
   let reject=true;
   await page.route(`**${endpoint}`,async route=>{
@@ -53,7 +53,7 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   });
   await first.getByRole("button",{name:"Save and next",exact:true}).click();
   await expect(first).toContainText("Controlled stale review"); await expect(second).toBeHidden();
-  await expect(first.getByLabel("Card condition",{exact:true})).toHaveValue("LP");
+  await expect(first.getByRole("combobox",{name:"Card condition",exact:true})).toHaveValue("LP");
   reject=false;
   await first.getByRole("button",{name:"Save and next",exact:true}).click();
   await expect(second).toBeVisible(); await expect(second).toBeFocused();
@@ -62,11 +62,11 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   expect(saved.review.openerPlayerId).toBe(f.user);
   await second.getByRole("button",{name:"Confirm and next",exact:true}).click();
   await expect(page.getByTestId("capture-card-3")).toBeVisible();
-  const show=page.getByLabel("Show cards",{exact:true});
-  await show.selectOption("added"); await expect(page.getByLabel("Jump to card",{exact:true})).toBeDisabled();
+  const show=page.getByRole("combobox",{name:"Show cards",exact:true});
+  await show.selectOption("added"); await expect(page.getByRole("combobox",{name:"Jump to card",exact:true})).toBeDisabled();
   await expect(page.getByText("No cards in this view. Choose All to return to the batch.",{exact:true})).toBeVisible();
   await show.selectOption("all");
-  await page.getByLabel("Jump to card",{exact:true}).selectOption(f.slots[13]);
+  await page.getByRole("combobox",{name:"Jump to card",exact:true}).selectOption(f.slots[13]);
   await expect(page.getByTestId("capture-card-14")).toBeVisible();
   await expect(page.getByRole("button",{name:"Next card",exact:true})).toBeDisabled();
   await expect(page.getByRole("button",{name:"Previous card",exact:true})).toBeEnabled();
