@@ -1,4 +1,14 @@
-## Current work - scan actions follow-up - November 19, 2026
+## Current work - desktop scan review audit - November 19, 2026
+
+Owner scan-review-density-20261119 / attended-scan-review-density-20261119; branch codex/scan-review-density based on main b538d6e0. Brian reported oversized images, hidden controls, unequal scan/printing display and confirmation movement, requested an audit and improvement, and explicitly prioritized desktop browsers. This bounded implementation/local review is authorized; prior PR1049 merge approval is consumed. No follow-up merge, production or scanner authority. Scope/findings: docs/SCAN_REVIEW_DESKTOP_AUDIT.md.
+
+Implemented compact sticky destination/actions, one wrapping review-options row, equal capped comparison frames with adjacent desktop details/actions, consistent name-only hint alignment, language feedback beside images, preventScroll saved focus, conditional reveal and a stable loading workspace. Existing current-batch-only Inventory, private images, drafts and replay/integrity rules retained. 23 focused draft/navigation/bulk/reload tests PASS. First two source-bound static production builds PASS; first browser harness exposed a queued/no-proposal fixture setup gap, then measured the remaining entry-point overflow (823px in a768px window). Both logs/failure evidence retained; final bundled source build and measured desktop workflows pending. Two existing fixture suites admit a separate13295 runtime so the active13285 sample is never reset.
+
+Exact laptop runtime claim active, budgets4500MiB Docker plus900MiB host reserve,4/7GiB host/Docker storage; resource evidence and identities in .local-data/scan-review-density-20261119/{resources,build-inputs}.json. Existing13285 sample/originals/database and rollback base remain protected; isolated clone DB03e9c31a768e/owned13295 review created for tests. First preview/browser stopped during serial builds. Root unrelated WIP and paused John-Mark work preserved. No issue creation without shared intake coordination. Next safe step: desktop viewport/confirmation/draft/Inventory regressions, source binding and exact-head CI; open draft PR and mark ready only after qualification. No merge approval for this follow-up.
+
+## Historical record - scan actions follow-up - November 19, 2026
+
+PR1049 subsequently merged with Brian's individual approval at b538d6e0; the following author-qualification record is historical.
 
 Owner scan-actions-20261119 / attended-scan-actions-20261119, laptop; branch codex/scans-review-experience and PR1049. Qualified product head e3768ad0; final metadata head/CI live on GitHub. Brian requested bulk-skip diagnosis, visible box/section and one final confirmation for confirmed cards, then clarified ONLY the batch being viewed. Original focused/two-column review remains included. No individual merge, production or physical-scanner authority granted. Root unrelated WIP and paused John-Mark reconciliation preserved; no issue creation without shared intake coordination.
 

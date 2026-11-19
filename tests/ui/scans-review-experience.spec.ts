@@ -13,7 +13,7 @@ function database(body: string) {
 }
 for (const width of [1366, 390, 320]) test(`focused comparison and two-column overview at ${width}px`, async ({page, baseURL}) => {
   test.setTimeout(180000);
-  expect(["http://127.0.0.1:13275","http://127.0.0.1:13285"]).toContain(baseURL);
+  expect(["http://127.0.0.1:13275","http://127.0.0.1:13285","http://127.0.0.1:13295"]).toContain(baseURL);
   const f = database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
   const originals=database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true,purgedAt:true}});`);
   database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:null,revision:{increment:1}}});`);
