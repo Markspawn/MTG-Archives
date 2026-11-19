@@ -176,13 +176,13 @@ export function AcquisitionCommitControls({
     >
       <h3 className="text-xl font-semibold">Confirm Inventory addition</h3>
       <p className="text-sm">
-        {allConfirmed ? "All eligible confirmed cards in this batch are included, across every review page." : "Only your chosen cards are included."}
-        {" "}Pending cards and unsaved corrections stay in the batch. Each scan adds one copy.
+        {allConfirmed ? "Only confirmed cards from this batch are included." : "Only your chosen cards are included."}
+        {" "}Pending cards and unsaved corrections stay here.
       </p>
-      <p role="status">
+      {!allConfirmed && <p role="status">
         {selected.length} selected ·{" "}
         {progress.slots.filter((s) => s.committed).length} already added
-      </p>
+      </p>}
       <p className="text-lg" data-testid="inventory-destination">Save to <strong>{locations.find(location => location.id === locationId)?.name ?? "Choose a box"}</strong>{" → "}<strong>{section || "No section"}</strong></p>
       {busy && !retrying && <p role="status">Preparing your confirmation…</p>}
       <details><summary className="cursor-pointer text-sm">Choose specific cards instead</summary>
@@ -215,7 +215,7 @@ export function AcquisitionCommitControls({
       </details>
       {!draftsReady && <p role="status" className="text-sm">Inventory selection is waiting for browser draft access. Allow browser storage and reload; individual reviews can still be saved.</p>}
       {skipped > 0 && <p role="status" className="text-sm">{skipped} reviewed {skipped === 1 ? "card is" : "cards are"} excluded because of unsaved corrections. Save or cancel them to include them.</p>}
-      {physicalPending > 0 && <p role="status" className="text-sm">{physicalPending} saved reviews remain pending. Check their review or physical reconciliation explanations before continuing.</p>}
+      {!allConfirmed && physicalPending > 0 && <p role="status" className="text-sm">{physicalPending} saved reviews remain pending. Check their review or physical reconciliation explanations before continuing.</p>}
       {selectedBlocked && selected.length > 0 && !retrying && <p role="status" className="text-sm">Selected cards include unsaved corrections or pending review or reconciliation. Resolve them before adding, or clear the selection and select ready cards.</p>}
       {retrying && <p role="status" className="text-sm">Recover the original Inventory addition before changing its selection or destination. Retry uses the same saved reviews and request.</p>}
       {!stopped && (
@@ -225,7 +225,7 @@ export function AcquisitionCommitControls({
 
         </p>
       )}
-      <p className="text-sm"><a className="underline" href="#scan-capture">Go to capture controls</a></p>
+      {!stopped && <p className="text-sm"><a className="underline" href="#scan-capture">Go to capture controls</a></p>}
       <details open={!locationId}>
       <summary className="cursor-pointer text-sm">Change destination</summary>
       <StorageDestinationPicker
@@ -262,6 +262,22 @@ export function AcquisitionCommitControls({
               : ""}
             .
           </p>
+          <button
+            className={primary}
+            disabled={
+              busy ||
+              (!retrying && selectedBlocked) ||
+              (!!preview.overfill &&
+                (!confirmOverfill || reason.trim().length < 3))
+            }
+            onClick={() => void commit()}
+          >
+            {busy
+              ? "Adding..."
+              : retrying
+                ? "Retry Inventory addition"
+                : `Add ${preview.count} ${preview.count === 1 ? "copy" : "copies"} to Inventory`}
+          </button>
           {!!preview.excluded?.length && <div className="text-sm" role="status">
             <p>Not included:</p><ul>{preview.excluded.map(item=><li key={item.reason}>{item.count} · {item.reason}</li>)}</ul>
           </div>}
@@ -325,22 +341,7 @@ export function AcquisitionCommitControls({
             adding. Completed or trashed batches may be permanently removed sooner
             when scan-photo storage approaches its limit; pending cards keep their photos.
           </p>
-          <button
-            className={primary}
-            disabled={
-              busy ||
-              (!retrying && selectedBlocked) ||
-              (!!preview.overfill &&
-                (!confirmOverfill || reason.trim().length < 3))
-            }
-            onClick={() => void commit()}
-          >
-            {busy
-              ? "Adding..."
-              : retrying
-                ? "Retry Inventory addition"
-                : `Add ${preview.count} ${preview.count === 1 ? "copy" : "copies"} to Inventory`}
-          </button>
+
         </div>
       )}
       {preview && !sameSelection && !retrying && (

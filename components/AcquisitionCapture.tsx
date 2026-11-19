@@ -972,7 +972,10 @@ export function AcquisitionCapture({
               if (capture) { capture.open = true; scrollScanTarget(capture); }
             }}>Capture controls</button>
             {!!readyPhotos && !bulkOpen && (
-              <a className={button + " inline-flex text-sm"} href="#scan-review">
+              <a className={button + " inline-flex text-sm"} href="#scan-review" onClick={event=>{
+                event.preventDefault();setInventoryOpen(false);
+                requestAnimationFrame(()=>scrollScanTarget(document.getElementById("scan-review")));
+              }}>
                 Review saved cards
               </a>
             )}
@@ -1197,7 +1200,7 @@ export function AcquisitionCapture({
           <div className="flex flex-col gap-4">
             <section
               id="scan-review"
-              hidden={bulkOpen}
+              hidden={bulkOpen || inventoryOpen}
               className={panel + " scroll-mt-[var(--scan-scroll-offset,14rem)]"}
             >
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">

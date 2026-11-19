@@ -10,12 +10,23 @@ function database(body:string) {
   return JSON.parse(execFileSync("docker",["exec","-i",id,"node"],{windowsHide:true,encoding:"utf8",timeout:30000,
     input:`const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();(async()=>{if(new URL(process.env.DATABASE_URL).pathname!=='/review_pending_performance')throw Error('Wrong fixture');${body}})().then(value=>console.log(JSON.stringify(value))).catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>p.$disconnect());`}));
 }
+function resetBatch(runId:string) {
+  return database(`const runId=${JSON.stringify(runId)};
+    const lots=[...new Set((await p.acquisitionCommitMember.findMany({where:{runId},select:{inventoryItemId:true}})).map(row=>row.inventoryItemId))];
+    await p.acquisitionCommitMember.deleteMany({where:{runId}});await p.acquisitionCommit.deleteMany({where:{runId}});
+    await p.inventoryAuditLog.deleteMany({where:{inventoryItemId:{in:lots}}});await p.inventoryItem.deleteMany({where:{id:{in:lots}}});return true;`);
+}
+test.beforeAll(()=>{
+  const other=database("return JSON.parse(require('fs').readFileSync('/tmp/scan-actions-large-fixture.json','utf8'));");
+  resetBatch(other.runId);
+});
+test.afterEach(async({page})=>{if(!page.isClosed()){await page.unrouteAll({behavior:"wait"});await page.close();}});
 for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inventory addition at ${width}px`,async({page,baseURL})=>{
   test.setTimeout(180000);expect(baseURL).toBe("http://127.0.0.1:13285");
   const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
+  const other=database("return JSON.parse(require('fs').readFileSync('/tmp/scan-actions-large-fixture.json','utf8'));");
+  resetBatch(f.runId);
   database(`const runId=${JSON.stringify(f.runId)},user=${JSON.stringify(f.user)};
-    await p.acquisitionCommitMember.deleteMany({where:{runId}});await p.acquisitionCommit.deleteMany({where:{runId}});
-    await p.inventoryAuditLog.deleteMany({where:{changedByUserId:user}});await p.inventoryItem.deleteMany({where:{currentOwnerId:user}});
     await p.acquisitionCandidate.updateMany({where:{runId},data:{review:require('@prisma/client').Prisma.DbNull,revision:{increment:1}}});
     const last=await p.acquisitionCandidate.findFirstOrThrow({where:{runId,acquisitionOrder:13}});
     await p.acquisitionCandidate.update({where:{id:last.id},data:{review:{cardId:${JSON.stringify(f.printing.id)},finish:'UNKNOWN',condition:'NM',language:'en',actorId:user}}});
@@ -41,7 +52,8 @@ for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inv
     const printing={...f.printing,...(i===3?{lang:null}:{})};
     await route.fulfill({response,json:{...record,recognitionStatus:"NO_MATCH",visualStatus:"COMPLETE",printingStatus:"COMPLETE",catalog:null,
       suggestions:i===2?[]:[{printing,reasons:["Controlled bulk fixture"]}],
-      evidence:{...record.evidence,identifiers:{...record.evidence?.identifiers,languages:i===1?["fr"]:i===5?["EN"]:[]}}}});
+      evidence:{geometry:{status:"MISSING"},rotation:null,observations:[],...record.evidence,
+        identifiers:{setCodes:[],collectors:[],...record.evidence?.identifiers,languages:i===1?["fr"]:i===5?["EN"]:[]}}}});
   });
   await page.setViewportSize({width,height:900});await page.goto(`/imports/scan?batch=${f.batch}`);
   await expect(page.getByTestId("scan-batch-destination")).toContainText("Review box → Section A");
@@ -61,6 +73,7 @@ for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inv
   await expect(confirmation).toContainText("8 copies");await expect(confirmation).toContainText("Review box");await expect(confirmation).toContainText("Section A");
   await expect(page.getByRole("button",{name:"Select reviewed cards",exact:true})).toBeHidden();
   await expect(page.getByRole("button",{name:"Preview selected cards",exact:true})).toBeHidden();
+  await expect.poll(()=>confirmation.getByRole("button",{name:"Add 8 copies to Inventory",exact:true}).evaluate(element=>element.getBoundingClientRect().bottom<=innerHeight)).toBe(true);
   await page.screenshot({path:`test-results/scan-actions-confirm-${width}.png`});
   await confirmation.getByRole("button",{name:"Add 8 copies to Inventory",exact:true}).click();
   if(width===1366) {
@@ -73,6 +86,7 @@ for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inv
   expect(saved.reduce((sum:number,row:{quantity:number})=>sum+row.quantity,0)).toBe(8);
   expect(saved.every((row:{locationId:string;locationSection:string;originalOpenerId:string;foilStatus:string})=>row.locationId===f.user&&row.locationSection==="Section A"&&row.originalOpenerId===f.user&&row.foilStatus==="NONFOIL")).toBe(true);
   expect(database(`return p.acquisitionCommitMember.count({where:{runId:${JSON.stringify(f.runId)}}});`)).toBe(8);
+  expect(database(`return p.acquisitionCommitMember.count({where:{runId:${JSON.stringify(other.runId)}}});`)).toBe(0);
   expect(database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true}});`)).toEqual(original);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
