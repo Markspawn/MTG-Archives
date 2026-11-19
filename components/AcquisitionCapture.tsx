@@ -179,6 +179,7 @@ export function AcquisitionCapture({
   function showReviewPage(page: number) {
     if (!Number.isInteger(page) || page < 0 || !progress || page >= progress.pagination.pages) return;
     setReviewPage(page); setPageChoice(String(page + 1)); setVisibleCount(12); setSelectedPhotos([]);
+    setFocusedSlotId(null); setVisitedSlots(new Set());
   }
   const [camera, setCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -202,6 +203,18 @@ export function AcquisitionCapture({
   const stopSelection = useRef(false);
   const [visibleCount, setVisibleCount] = useState(12);
   const [reviewMode, setReviewMode] = useState<AcquisitionReviewMode>("simple");
+  const [reviewLayout, setReviewLayout] = useState<"focus" | "list">("focus");
+  const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
+  const [visitedSlots, setVisitedSlots] = useState<Set<string>>(() => new Set());
+  const [busyReviews, setBusyReviews] = useState<Set<string>>(() => new Set());
+  const markReviewBusy = useCallback((photoId: string, busy: boolean) => {
+    setBusyReviews(previous => {
+      if (previous.has(photoId) === busy) return previous;
+      const next = new Set(previous);
+      if (busy) next.add(photoId); else next.delete(photoId);
+      return next;
+    });
+  }, []);
   const [reviewFilter, setReviewFilter] =
     useState<AcquisitionReviewFilter>("all");
   const [dirtyPhotos, setDirtyPhotos] = useState<Set<string>>(() => new Set());
@@ -239,17 +252,35 @@ export function AcquisitionCapture({
     (slot) =>
       visibleIds.has(slot.id) || hasDraft(slot),
   );
+  // Keep visited editors mounted: moving between cards must not discard a live
+  // correction, failed storage write or an in-flight review response.
+  const focusedSlot = progress?.slots.find(slot => slot.id === focusedSlotId) ?? filteredSlots[0];
+  const focusedId = focusedSlot?.id;
+  const focusedIndex = filteredSlots.findIndex(slot => slot.id === focusedSlot?.id);
+  const renderedSlots = (progress?.slots ?? []).filter(slot =>
+    shownSlots.includes(slot) || visitedSlots.has(slot.id) || slot.id === focusedSlot?.id);
+  useEffect(() => {
+    if (reviewLayout !== "focus" || !focusedId) return;
+    setFocusedSlotId(focusedId);
+    setVisitedSlots(previous => previous.has(focusedId) ? previous : new Set([...previous, focusedId]));
+  }, [reviewLayout, focusedId]);
+  function revealCard(position: number) {
+    const slot = progress?.slots.find(slot => slot.position === position);
+    if (!slot) return;
+    setFocusedSlotId(slot.id);
+    setVisibleCount(count => Math.max(count, (progress?.slots.indexOf(slot) ?? 0) + 1));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const row = document.getElementById(`capture-card-${position + 1}`);
+      scrollScanTarget(row); row?.focus({ preventScroll: true });
+    }));
+  }
   const [reviewNavigation, setReviewNavigation] = useState("");
   function nextAwaitingReview(after: number) {
     const next = nextAwaitingAcquisitionSlot(progress?.slots ?? [], after, hasDraft);
     if (!next) { setReviewNavigation("No other cards awaiting review on this page. Check the other saved-card pages."); return; }
     setReviewNavigation(`Card ${next.position + 1} awaiting review.`);
     setReviewFilter("all");
-    setVisibleCount(count => Math.max(count, next.position + 1));
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const row = document.getElementById(`capture-card-${next.position + 1}`);
-      scrollScanTarget(row); row?.focus({ preventScroll: true });
-    }));
+    revealCard(next.position);
   }
   useEffect(() => {
     try {
@@ -257,6 +288,7 @@ export function AcquisitionCapture({
         `mtg-acquisition-review-mode:${userId}`,
       );
       setReviewMode(saved === "advanced" ? "advanced" : "simple");
+      setReviewLayout(localStorage.getItem(`mtg-acquisition-review-layout:${userId}`) === "list" ? "list" : "focus");
     } catch {
       /* The review remains usable without browser storage. */
     }
@@ -268,9 +300,13 @@ export function AcquisitionCapture({
     dirtyNow.current.clear();
     setDirtyPhotos(new Set());
     setReviewNavigation("");
+    setFocusedSlotId(null);
+    setVisitedSlots(new Set());
+    setBusyReviews(new Set());
   }, [batchId]);
   const moreCards = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (reviewLayout !== "list") return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting)
@@ -280,7 +316,7 @@ export function AcquisitionCapture({
     );
     if (moreCards.current) observer.observe(moreCards.current);
     return () => observer.disconnect();
-  }, [visibleCount, filteredSlots.length]);
+  }, [visibleCount, filteredSlots.length, reviewLayout]);
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
@@ -890,6 +926,14 @@ export function AcquisitionCapture({
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2" aria-label="Batch actions">
             <a className={button} href={`/imports/batches?q=${progress.batchNumber}&view=all`}>Manage batch</a>
+            <button type="button" className={button} onClick={() => {
+              const settings = document.getElementById("scan-defaults") as HTMLDetailsElement | null;
+              if (settings) { settings.open = true; scrollScanTarget(settings); }
+            }}>Batch settings</button>
+            <button type="button" className={button} onClick={() => {
+              const capture = document.getElementById("scan-capture") as HTMLDetailsElement | null;
+              if (capture) { capture.open = true; scrollScanTarget(capture); }
+            }}>Capture controls</button>
             {!!readyPhotos && !bulkOpen && (
               <a className={button + " inline-flex text-sm"} href="#scan-review">
                 Review saved cards
@@ -923,7 +967,10 @@ export function AcquisitionCapture({
               batch destination before taking more.
             </p>
           )}
-          <div id="scan-capture" className="scroll-mt-[var(--scan-scroll-offset,14rem)]">
+          <details id="scan-capture" className="scroll-mt-[var(--scan-scroll-offset,14rem)]"
+            open={["CAPTURING", "STOPPING"].includes(progress.phase)}>
+          <summary className="cursor-pointer text-sm font-medium">Capture controls · {progress.phase.toLowerCase()}</summary>
+          <div className="mt-3">
           {progress.providerId === SCANNER_CAPTURE_PROVIDER ? <ScannerRunControls runId={progress.runId} savedImages={readyPhotos} refresh={refresh} /> : <section className={panel} aria-label="Card camera">
             <p className="mb-2">
               Photograph one card at a time, with the whole front visible and as
@@ -1053,6 +1100,7 @@ export function AcquisitionCapture({
             )}
           </section>}
           </div>
+          </details>
           {!!uploads.length && (
             <section className={panel} aria-label="Pending uploads">
               <h3 className="font-semibold">Uploads</h3>
@@ -1086,7 +1134,7 @@ export function AcquisitionCapture({
               </ul>
             </section>
           )}
-          <details className="min-w-0" open={reviewMode === "advanced"}>
+          <details id="scan-defaults" className="min-w-0 scroll-mt-[var(--scan-scroll-offset,14rem)]" open={reviewMode === "advanced"}>
           <summary className="cursor-pointer text-sm">Batch defaults: {progress.defaults.finish.toLowerCase()} · {progress.defaults.condition ?? "condition unset"} · {progress.defaults.language?.toUpperCase()??"language from printing evidence"} · Original opener: {acquisitionOpenerName(progress.defaults.openerPlayerId, openerChoices)} · Change</summary>
           <AcquisitionBatchDefaults
             key={`defaults:${batchId}`}
@@ -1100,8 +1148,7 @@ export function AcquisitionCapture({
           <AcquisitionBulkReview key={`bulk:${batchId}`} batchId={batchId} slots={progress.slots} defaults={progress.defaults} openerChoices={openerChoices} refresh={refresh}
             blockedPhotos={blockedPhotos} draftsReady={cachedDrafts.ready} canUsePhotos={canUsePhotos}
             onOpenChange={setBulkOpen} onConfirmed={ids => { setSelectedPhotos(previous => [...new Set([...previous, ...ids])]); showInventory(); }}
-            onInspect={position => { setReviewFilter("all"); setVisibleCount(count => Math.max(count, position));
-              requestAnimationFrame(() => scrollScanTarget(document.getElementById(`capture-card-${position}`))); }} />
+            onInspect={position => { setReviewFilter("all"); revealCard(position - 1); }} />
           <div id="scan-inventory" tabIndex={-1} className="scroll-mt-[var(--scan-scroll-offset,14rem)]" hidden={!inventoryOpen}>
             <button className={button + " mb-2"} onClick={() => { setInventoryOpen(false); requestAnimationFrame(() => scrollScanTarget(document.getElementById("scan-review"))); }}>Back to matches</button>
             <AcquisitionCommitControls key={`commit:${batchId}`} progress={progress} locations={locations}
@@ -1114,7 +1161,17 @@ export function AcquisitionCapture({
               hidden={bulkOpen}
               className={panel + " scroll-mt-[var(--scan-scroll-offset,14rem)]"}
             >
-              <h3 className="font-semibold">Saved cards</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h3 className="text-xl font-semibold">Saved cards</h3>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Review layout">
+                  {(["focus", "list"] as const).map(layout => <button key={layout} type="button"
+                    className={reviewLayout === layout ? primary : button} aria-pressed={reviewLayout === layout}
+                    disabled={busyReviews.size > 0} onClick={() => {
+                      setReviewLayout(layout);
+                      try { localStorage.setItem(`mtg-acquisition-review-layout:${userId}`, layout); } catch { /* Session remains usable. */ }
+                    }}>{layout === "focus" ? "Focused review" : "Two-column list"}</button>)}
+                </div>
+              </div>
               {progress.pagination.pages > 1 && <nav className="flex flex-wrap items-center gap-2 my-3" aria-label="Saved-card pages">
                 <button className={button} disabled={busy || !cachedDrafts.ready || dirtyPhotos.size > 0 || progress.pagination.page === 0}
                   onClick={() => showReviewPage(progress.pagination.page - 1)}>Previous cards</button>
@@ -1163,9 +1220,11 @@ export function AcquisitionCapture({
                   Show cards
                   <select
                     className={input + " min-w-0 max-w-full"}
+                    disabled={busyReviews.size > 0}
                     value={reviewFilter}
                     onChange={(e) => {
                       setReviewFilter(e.target.value as AcquisitionReviewFilter);
+                      setFocusedSlotId(null);
                       // Manual filtering starts a page; target navigation above
                       // keeps the larger extent it needs to reach its card.
                       setVisibleCount(12);
@@ -1212,14 +1271,44 @@ export function AcquisitionCapture({
               </p>
               {!!dirtyPhotos.size && (
                 <p className="text-sm mb-3" role="status">
-                  Unsaved edits stay visible when you change the filter.
+                  Unsaved edits are kept when you change cards, filters or views. Choose a card to return to its correction.
                 </p>
               )}
               {reviewNavigation && <p role="status" className="text-sm mb-3">{reviewNavigation}</p>}
-              <div
-                className={reviewMode === "simple" ? "space-y-3" : "space-y-6"}
-              >
-                {shownSlots.map((slot) => {
+              {reviewLayout === "focus" && <div className="min-w-0 mb-4 space-y-3" aria-label="Card navigator">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className={button} disabled={busyReviews.size > 0 || focusedIndex <= 0}
+                    onClick={() => revealCard(filteredSlots[focusedIndex - 1].position)}>Previous card</button>
+                  <span className="text-sm" role="status">{focusedSlot ? `Card ${focusedSlot.position + 1} · ${filteredSlots.length} matching on this page` : "No matching cards on this page"}</span>
+                  <button type="button" className={button} disabled={busyReviews.size > 0 || !filteredSlots.length || focusedIndex + 1 >= filteredSlots.length}
+                    onClick={() => revealCard(filteredSlots[focusedIndex + 1].position)}>Next card</button>
+                  <label className="text-sm min-w-0 max-w-full">Jump to card
+                    <select className={input + " block w-full max-w-full"} value={focusedId ?? ""}
+                      disabled={busyReviews.size > 0 || !filteredSlots.length}
+                      onChange={event => { const slot = filteredSlots.find(slot => slot.id === event.target.value); if (slot) revealCard(slot.position); }}>
+                      {focusedSlot && focusedIndex < 0 && <option value={focusedSlot.id}>Card {focusedSlot.position + 1} · outside filter</option>}
+                      {!focusedSlot && <option value="">No matching cards</option>}
+                      {filteredSlots.map(slot => <option key={slot.id} value={slot.id}>Card {slot.position + 1} · {hasDraft(slot) ? "Unsaved correction" : slot.committed ? "Added" : acquisitionSlotReviewState(slot) === "ready" ? "Confirmed" : "Pending"}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <details className="min-w-0">
+                  <summary className="cursor-pointer text-sm">Choose a card ({filteredSlots.length})</summary>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-2 max-h-60 overflow-y-auto p-1" role="group" aria-label="Cards on this page">
+                    {filteredSlots.map(slot => <button key={slot.id} type="button"
+                      className={(focusedSlot?.id === slot.id ? primary : button) + " text-left min-w-0"}
+                      aria-current={focusedSlot?.id === slot.id ? "true" : undefined} disabled={busyReviews.size > 0}
+                      onClick={() => revealCard(slot.position)}>
+                      <span className="block">Card {slot.position + 1}</span>
+                      <span className="block text-xs truncate">{slot.review?.cardName ?? "Check scan"}</span>
+                      <span className="block text-xs">{hasDraft(slot) ? "Unsaved correction" : acquisitionSlotReviewState(slot) === "ready" ? "Confirmed" : slot.committed ? "Added" : "Pending"}</span>
+                    </button>)}
+                  </div>
+                </details>
+                {focusedSlot && focusedIndex < 0 && <p className="text-sm" role="status">This card no longer matches the filter. Choose Next card to continue, or change Show cards.</p>}
+              </div>}
+              <div className={reviewLayout === "list" && reviewMode === "simple" ? "grid lg:grid-cols-2 items-start gap-5" : "space-y-6"}>
+                {renderedSlots.map((slot) => {
                   const photo = slot.photos.find((p) => p.ready),
                     pending = uploads.some((p) => p.slotId === slot.id);
                   const photoWork = progress.photoPreparation.find(
@@ -1232,11 +1321,16 @@ export function AcquisitionCapture({
                       id={`capture-card-${slot.position + 1}`}
                       data-testid={`capture-card-${slot.position + 1}`}
                       tabIndex={-1}
+                      hidden={reviewLayout === "focus" ? focusedSlot?.id !== slot.id : !shownSlots.includes(slot)}
                       className={`min-w-0 scroll-mt-[var(--scan-scroll-offset,14rem)] space-y-2 border-b border-[var(--app-border)] ${reviewMode === "simple" ? "pb-3" : "pb-6"}`}
                     >
                       <p>
                         Card {slot.position + 1}
                         {photo?.inputKind === "CARD_SCAN" ? " · Card scan" : ""}
+                        {reviewLayout === "list" && <button type="button" className={button + " ml-2 text-sm"}
+                          disabled={busyReviews.size > 0} onClick={() => { setReviewLayout("focus"); revealCard(slot.position); }}>
+                          Focus card {slot.position + 1}
+                        </button>}
                       </p>
                       {photoMatches.has(slot.id) && (
                         <p role="status" className="text-sm break-words rounded border border-amber-500/50 bg-amber-500/10 p-2">
@@ -1255,7 +1349,9 @@ export function AcquisitionCapture({
                           refreshKey={`${progress.defaultsRevision}:${slot.reviewRevision}:${JSON.stringify(slot.review)}:${preparation}:${photoWork?.evidenceVersion??""}`}
                           refresh={() => void refresh()}
                           mode={reviewMode}
+                          focused={reviewLayout === "focus"}
                           onDirtyChange={markPhotoDirty}
+                          onBusyChange={markReviewBusy}
                           onNextAwaiting={() => nextAwaitingReview(slot.position)}
                         />
                       ) : (
@@ -1340,12 +1436,12 @@ export function AcquisitionCapture({
                   );
                 })}
               </div>
-              {!shownSlots.length && (
+              {!(reviewLayout === "focus" ? focusedSlot : shownSlots.length) && (
                 <p className="text-sm">
                   No cards in this view. Choose All to return to the batch.
                 </p>
               )}
-              {visibleCount < filteredSlots.length && (
+              {reviewLayout === "list" && visibleCount < filteredSlots.length && (
                 <div ref={moreCards} className="mt-3">
                   <button
                     className={button}
@@ -1355,14 +1451,14 @@ export function AcquisitionCapture({
                   </button>
                 </div>
               )}
-              <p className="text-xs mt-3">
+              {reviewLayout === "list" && <p className="text-xs mt-3">
                 Showing {Math.min(visibleCount, filteredSlots.length)} of{" "}
                 {filteredSlots.length} matching cards.
                 {shownSlots.length > visibleIds.size
                   ? ` ${shownSlots.length - visibleIds.size} other cards with unsaved edits stay visible.`
                   : ""}{" "}
                 More cards load as you scroll.
-              </p>
+              </p>}
             </section>
           </div>
         </>

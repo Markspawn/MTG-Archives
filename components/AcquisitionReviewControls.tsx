@@ -231,6 +231,8 @@ export function AcquisitionPhotoReview({
   committed = false,
   mode = "advanced",
   onDirtyChange,
+  onBusyChange,
+  focused = false,
   onNextAwaiting,
   openerChoices = [],
 }: {
@@ -242,6 +244,8 @@ export function AcquisitionPhotoReview({
   committed?: boolean;
   mode?: AcquisitionReviewMode;
   onDirtyChange?: (photoId: string, dirty: boolean) => void;
+  onBusyChange?: (photoId: string, busy: boolean) => void;
+  focused?: boolean;
   onNextAwaiting?: () => void;
   openerChoices?: AcquisitionOpenerChoice[];
 }) {
@@ -263,6 +267,10 @@ export function AcquisitionPhotoReview({
   const [matches, setMatches] = useState<AcquisitionPrinting[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [regionEditing, setRegionEditing] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(photoId, busy || regionEditing);
+    return () => onBusyChange?.(photoId, false);
+  }, [busy, regionEditing, photoId, onBusyChange]);
   const [observedRevision, setObservedRevision] = useState<number | null>(null);
   const [draftDirty, setDraftDirty] = useState(false);
   const [draftWarning, setDraftWarning] = useState("");
@@ -510,7 +518,7 @@ export function AcquisitionPhotoReview({
     }
   }
   async function submit(action: "accept" | "pending", next = false) {
-    if (!record || regionEditing) return;
+    if (!record || busy || regionEditing) return;
     ++requestVersion.current;
     setBusy(true);
     setError("");
@@ -867,7 +875,7 @@ export function AcquisitionPhotoReview({
       className="min-w-0"
       style={{ minHeight: record ? undefined : simple ? 200 : 560 }}
       onKeyDown={event => {
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && showEditor && !committed) {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !committed) {
           event.preventDefault();
           if (!busy && !regionEditing && canConfirm) void submit("accept", event.shiftKey);
         }
@@ -980,7 +988,7 @@ export function AcquisitionPhotoReview({
               </p>
             )}
           {!simple && <AcquisitionScannerLayoutControls record={record} endpoint={endpoint} disabled={busy||regionEditing} refresh={refresh} onChange={saved=>setRecord(previous=>previous?{...previous,scannerLayout:{...previous.scannerLayout!,saved}}:previous)} />}
-          {!committed && !regionEditing && <button type="button" className={button + " mb-3"} disabled={busy}
+          {!simple && !committed && !regionEditing && <button type="button" className={button + " mb-3"} disabled={busy}
             onClick={() => {setRegionEditing(true); onDirtyChange?.(photoId, true);}}>Edit card boundary</button>}
           {!committed && regionEditing && <AcquisitionCardRegionEditor
             src={`/api/acquisition/${batchId}/photos/${photoId}`} record={record} latestRevision={observedRevision ?? record.revision} busy={busy}
@@ -990,7 +998,9 @@ export function AcquisitionPhotoReview({
           <div
             className={
               simple
-                ? "grid grid-cols-2 lg:grid-cols-[minmax(0,232px)_minmax(0,232px)_minmax(0,1fr)] gap-3 min-w-0"
+                ? focused
+                  ? "grid grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(240px,0.85fr)] gap-3 sm:gap-5 min-w-0"
+                  : "grid grid-cols-2 gap-3 min-w-0"
                 : "grid grid-cols-2 gap-3 sm:gap-6 min-w-0"
             }
           >
@@ -1000,6 +1010,7 @@ export function AcquisitionPhotoReview({
               active={active}
               position={record.position + 1}
               compact={simple}
+              expanded={focused}
             />
             <figure className="min-w-0">
               <figcaption
@@ -1072,7 +1083,7 @@ export function AcquisitionPhotoReview({
               )}
             </figure>
             {simple && (
-              <div className="min-w-0 col-span-2 lg:col-span-1 self-center">
+              <div className={`min-w-0 col-span-2 ${focused ? "xl:col-span-1" : ""} self-start`}>
                 <p className="font-semibold break-words">
                   {selected?.name ?? "No proposed printing yet"}
                 </p>
@@ -1139,13 +1150,20 @@ export function AcquisitionPhotoReview({
                 {!committed && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {(!record.review || draftDirty) && !showEditor && (
+                      <>
+                      {focused && onNextAwaiting && <button className={primary}
+                        disabled={busy || regionEditing || !canConfirm}
+                        onClick={() => void submit("accept", true)}>
+                        {draftDirty ? "Save and next" : "Confirm and next"}
+                      </button>}
                       <button
-                        className={primary}
+                        className={focused ? button : primary}
                         disabled={busy || regionEditing || !canConfirm}
                         onClick={() => void submit("accept")}
                       >
                         {draftDirty ? "Save card review" : "Confirm match"}
                       </button>
+                      </>
                     )}
                     {!showEditor && (
                       <button

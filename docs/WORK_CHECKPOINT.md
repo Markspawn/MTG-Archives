@@ -1,3 +1,11 @@
+## Current work - scan review experience - November 19, 2026
+
+Owner scans-review-experience-20261119 / attended-scans-review-experience-20261119, laptop; branch codex/scans-review-experience from main 5c688ac0. Brian requested planning and implementation of clearer scan controls and faster scan/printing comparison, then explicitly requested a two-column list alongside focused review. Plan and acceptance: docs/SCANS_REVIEW_EXPERIENCE.md. Source/PR authorized; individual merge and production deployment remain separate.
+
+Implemented focused navigation, two-column desktop overview/stacked phone card pairs, preserved mounted drafts, larger comparisons, Confirm and next and direct batch settings/capture access. Separate Inventory commit and existing bounded pages/privacy/readiness checks retained. Root unrelated WIP preserved. No new issue because cross-node intake coordination is unestablished; existing #1004 timing acceptance remains separate.
+
+Author qualification underway in a disposable, owner-labeled Docker database/runtime at local port13275. Types pass; production build, browser regressions, exact-head CI and final cleanup pending. Primary installation remains stopped/unmodified; no physical scanner or production/business action. Private resource/build identities and failures: .local-data/scans-review-experience-20261119. Next safe step: finish build and desktop/390/320 review, publish one PR and retain current review plus rollback resources.
+
 ## Current work - pending scan performance - November 17, 2026
 
 Owner pending-scan-performance-20261118, attended laptop. Branch `codex/pending-scan-performance`, base `b603933c`. Brian authorized the suggested fixes and later "push to main whenever it's ready to go" in this task; that covers this coherent batch's merge after checks, not production deployment. Related #1004; original acceptance/history preserved. No scan/batch caps or forced reconciliation. Root WIP preserved.
