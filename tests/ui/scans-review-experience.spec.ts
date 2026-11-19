@@ -1,8 +1,10 @@
 import {test, expect} from "@playwright/test";
 import {execFileSync} from "node:child_process";
+import {resetDesktopReviewInventory} from "./scan-review-fixture";
 
 test.skip(process.env.MTG_SCANS_EXPERIENCE_TEST !== "1", "Owned disposable scan-review fixture required");
 test.use({video: "off", actionTimeout: 15000});
+test.beforeAll(({baseURL})=>{if(baseURL==="http://127.0.0.1:13295")resetDesktopReviewInventory();});
 function database(body: string) {
   const container = process.env.MTG_INVENTORY_TEST_CONTAINER ?? "";
   if (!/^[a-f0-9]{64}$/.test(container)) throw Error("Immutable owned review container required");

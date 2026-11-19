@@ -1,8 +1,11 @@
 import {test,expect, type Page} from "@playwright/test";
 import {execFileSync} from "node:child_process";
+import {resetDesktopReviewInventory} from "./scan-review-fixture";
 
 test.skip(process.env.MTG_SCAN_DESKTOP_TEST !== "1", "Owned disposable desktop scan-review fixture required");
 test.use({video:"off",actionTimeout:15000});
+test.beforeAll(()=>resetDesktopReviewInventory());
+test.afterEach(async({page})=>{await page.unrouteAll({behavior:"wait"});await page.close();});
 function database(body:string) {
   const id=process.env.MTG_INVENTORY_TEST_CONTAINER??"";
   if(!/^[a-f0-9]{64}$/.test(id))throw Error("Immutable owned review app required");
@@ -36,13 +39,15 @@ for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:19
     const response=await route.fetch(),record=await response.json();
     await route.fulfill({response,json:{...record,recognitionStatus:"NO_MATCH",visualStatus:"COMPLETE",printingStatus:"COMPLETE",catalog:null,
       suggestions:[{printing:f.printing,reasons:["UNLOCALIZED_NAME_HINT"]}],
-      evidence:{...record.evidence,identifiers:{...record.evidence?.identifiers,languages:["fr"]}}}});
+      evidence:{geometry:{status:"MISSING"},rotation:null,observations:[],...record.evidence,identifiers:{...record.evidence?.identifiers,languages:["fr"]}}}});
   });
   await page.goto(`/imports/scan?batch=${f.batch}`);
   await page.getByRole("link",{name:"Review saved cards",exact:true}).click();
   const first=page.getByTestId("capture-card-1");
   await expect(first.getByRole("button",{name:"Confirm and next",exact:true})).toBeEnabled();
   await expect.poll(()=>first.locator("canvas").evaluate((e:HTMLCanvasElement)=>e.width)).toBeGreaterThan(0);
+  await expect(first.getByRole("img",{name:/Printing:/})).toBeVisible();
+  await expect.poll(()=>first.locator("img").first().evaluate((e:HTMLImageElement)=>e.naturalWidth)).toBeGreaterThan(0);
   const frames=await first.locator('[data-testid$="comparison-frame"]').evaluateAll(elements=>elements.map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,bottom:r.bottom}}));
   expect(frames).toHaveLength(2);expect(Math.abs(frames[0].w-frames[1].w)).toBeLessThan(1);expect(Math.abs(frames[0].h-frames[1].h)).toBeLessThan(1);expect(Math.abs(frames[0].y-frames[1].y)).toBeLessThan(1);
   for(const r of frames){expect(r.y).toBeGreaterThan(0);expect(r.bottom).toBeLessThanOrEqual(viewport.height);expect(r.h).toBeLessThanOrEqual(361);expect(r.h).toBeGreaterThanOrEqual(219);}
@@ -72,7 +77,10 @@ for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:19
   const second=page.getByTestId("capture-card-2");
   const columns=await Promise.all([first,second].map(card=>card.boundingBox()));
   expect(Math.abs(columns[0]!.y-columns[1]!.y)).toBeLessThan(1);expect(columns[1]!.x).toBeGreaterThan(columns[0]!.x+columns[0]!.width);
-  await expect(first.getByRole("button",{name:"Correct",exact:true})).toBeVisible();await expect(second.getByRole("button",{name:"Correct",exact:true})).toBeVisible();
+  for(const card of [first,second]) {
+    const correct=card.getByRole("button",{name:"Correct",exact:true});await expect(correct).toBeVisible();
+    expect(await correct.evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;})).toBe(true);
+  }
   await page.screenshot({path:testInfo.outputPath("two-column-desktop.png")});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(database(`return p.inventoryItem.findMany({where:{currentOwnerId:${JSON.stringify(f.user)}},orderBy:{id:'asc'}});`)).toEqual(inventory);

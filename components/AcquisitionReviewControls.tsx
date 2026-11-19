@@ -1079,7 +1079,7 @@ export function AcquisitionPhotoReview({
               )}
             </figure>
             {simple && (
-              <div className={`min-w-0 col-span-2 ${focused ? "lg:col-span-1" : ""} self-start`}>
+              <div className="min-w-0 col-span-2 lg:col-span-1 self-start">
                 <p className="font-semibold break-words">
                   {selected?.name ?? "No proposed printing yet"}
                 </p>

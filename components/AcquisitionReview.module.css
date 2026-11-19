@@ -7,6 +7,8 @@
 .workspace { overflow-anchor: none; min-height: calc(100dvh - var(--scan-toolbar-offset, 110px) - 16px); }
 .review { min-height: calc(clamp(220px, calc(100dvh - 400px), 360px) + 100px); }
 @media (min-width: 1024px) {
+  .list { grid-template-columns: repeat(2, minmax(0, 140px)) minmax(140px, 1fr); }
+  .list .media { max-width: 140px; }
   .focused { grid-template-columns: repeat(2, minmax(0, calc(var(--scan-media-height) * .71582))) minmax(200px, 1fr); gap: 20px; min-height: calc(var(--scan-media-height) + 70px); }
   .focused .media { height: var(--scan-media-height); }
 }

@@ -282,7 +282,7 @@ export function AcquisitionCapture({
     setFocusedSlotId(focusedId);
     setVisitedSlots(previous => previous.has(focusedId) ? previous : new Set([...previous, focusedId]));
   }, [reviewLayout, focusedId]);
-  function revealCard(position: number) {
+  function revealCard(position: number, alignToStart = false) {
     const slot = progress?.slots.find(slot => slot.position === position);
     if (!slot) return;
     setFocusedSlotId(slot.id);
@@ -294,7 +294,7 @@ export function AcquisitionCapture({
       const clearTop = (cardNavigator.current?.getBoundingClientRect().bottom ?? progressPanel.current?.getBoundingClientRect().bottom ?? 0) + 8;
       // Moving between equally sized cards should keep the user's viewport still.
       // Only reveal a target that is actually outside the usable viewport.
-      if (top !== undefined && (top < clearTop - 1 || top > window.innerHeight - 80)) scrollScanTarget(row);
+      if (alignToStart || (top !== undefined && (top < clearTop - 1 || top > window.innerHeight - 80))) scrollScanTarget(row);
       row?.focus({ preventScroll: true });
     }));
   }
@@ -970,7 +970,7 @@ export function AcquisitionCapture({
               <a className={button + " inline-flex !px-2 !py-1 text-xs"} href="#scan-review" onClick={event=>{
                 event.preventDefault();setInventoryOpen(false);
                 requestAnimationFrame(() => {
-                  if (reviewLayout === "focus" && focusedSlot) revealCard(focusedSlot.position);
+                  if (reviewLayout === "focus" && focusedSlot) revealCard(focusedSlot.position, true);
                   else scrollScanTarget(document.querySelector<HTMLElement>("#scan-review [data-testid^='capture-card-']:not([hidden])") ?? document.getElementById("scan-review"));
                 });
               }}>
