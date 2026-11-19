@@ -347,8 +347,14 @@ export function AcquisitionCapture({
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  function showInventory() {
+  const [inventoryPreviewRequest,setInventoryPreviewRequest] = useState<{id:number;all:boolean}>();
+  const inventoryRequest = useRef(0);
+  const [inventoryDestination,setInventoryDestination] = useState<{locationId:string;section:string}|null>(null);
+  const updateInventoryDestination = useCallback((locationId:string,section:string)=>setInventoryDestination({locationId,section}),[]);
+  const saveDestination = inventoryDestination ?? {locationId:progress?.locationId ?? "",section:progress?.section ?? ""};
+  function showInventory(all = true) {
     setInventoryOpen(true);
+    setInventoryPreviewRequest({id:++inventoryRequest.current,all});
     requestAnimationFrame(() => {
       const panel = document.getElementById("scan-inventory");
       scrollScanTarget(panel);
@@ -943,6 +949,10 @@ export function AcquisitionCapture({
                 ? " cards"
                 : ` of ${progress.target} cards`}
             </h2>
+            <p className="text-base sm:text-lg font-medium" data-testid="scan-batch-destination">
+              Inventory destination: <strong>{locations.find(location=>location.id===saveDestination.locationId)?.name ?? "Choose a box"}</strong>
+              {" → "}<strong>{saveDestination.section || "No section"}</strong>
+            </p>
             <p role="status" aria-live="polite">
               {uploads.filter((p) => p.status !== "failed").length} uploading ·{" "}
               On this page: {readyPhotos} {readyPhotos === 1 ? "photo" : "photos"} saved · {prepared} {prepared === 1 ? "photo" : "photos"} prepared
@@ -966,8 +976,8 @@ export function AcquisitionCapture({
                 Review saved cards
               </a>
             )}
-            {cachedDrafts.ready && reviewCounts.ready > 0 && <a className={primary + " inline-flex max-w-full text-sm whitespace-normal"} href="#scan-inventory" onClick={event => { event.preventDefault(); showInventory(); }}>
-              Add {reviewCounts.ready} confirmed {reviewCounts.ready === 1 ? "card" : "cards"} to Inventory
+            {cachedDrafts.ready && <a className={primary + " inline-flex max-w-full text-sm whitespace-normal"} href="#scan-inventory" onClick={event => { event.preventDefault(); showInventory(); }}>
+              Add all confirmed cards to Inventory
             </a>}
             </div>
             <p className="text-xs text-[var(--app-muted)]">
@@ -1174,12 +1184,14 @@ export function AcquisitionCapture({
           </details>
           <AcquisitionBulkReview key={`bulk:${batchId}`} batchId={batchId} slots={progress.slots} defaults={progress.defaults} openerChoices={openerChoices} refresh={refresh}
             blockedPhotos={blockedPhotos} draftsReady={cachedDrafts.ready} canUsePhotos={canUsePhotos}
-            onOpenChange={setBulkOpen} onConfirmed={ids => { setSelectedPhotos(previous => [...new Set([...previous, ...ids])]); showInventory(); }}
+            onOpenChange={setBulkOpen} onConfirmed={ids => { setSelectedPhotos(previous => [...new Set([...previous, ...ids])]);
+              requestAnimationFrame(()=>scrollScanTarget(document.getElementById("scan-bulk-review"))); }}
             onInspect={position => { setReviewFilter("all"); revealCard(position - 1); }} />
           <div id="scan-inventory" tabIndex={-1} className="scroll-mt-[var(--scan-scroll-offset,14rem)]" hidden={!inventoryOpen}>
             <button className={button + " mb-2"} onClick={() => { setInventoryOpen(false); requestAnimationFrame(() => scrollScanTarget(document.getElementById("scan-review"))); }}>Back to matches</button>
             <AcquisitionCommitControls key={`commit:${batchId}`} progress={progress} locations={locations}
               blockedPhotos={blockedPhotos} draftsReady={cachedDrafts.ready} canUsePhotos={canUsePhotos}
+              previewRequest={inventoryPreviewRequest} onDestinationChange={updateInventoryDestination}
               selected={selectedPhotos} onSelect={setSelectedPhotos} refresh={refresh} />
           </div>
           <div className="flex flex-col gap-4">
@@ -1431,7 +1443,7 @@ export function AcquisitionCapture({
                             }
                             setError("");
                             setSelectedPhotos(ids => [...new Set([...ids, photo.id])]);
-                            showInventory();
+                            showInventory(false);
                           }}
                         >Continue to Inventory</button>
                         {!cachedDrafts.ready && <p className="text-sm">Allow browser draft access before continuing.</p>}

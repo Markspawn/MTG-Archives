@@ -37,6 +37,7 @@ import {
 import {
   commitAcquisitionCards,
   previewAcquisitionCommit,
+  previewConfirmedAcquisitionCommit,
 } from "../lib/acquisition-commit-service";
 import { candidateKey } from "../lib/acquisition-domain";
 import { acquisitionReviewCounts, acquisitionSlotReviewState } from "../lib/acquisition-review-display";
@@ -1143,6 +1144,22 @@ export async function verifyAcquisitionCommit(
     assert.deepEqual(await db.inventoryAuditLog.findMany({where:{inventoryItemId:{in:openerReceipt.inventoryItemIds}},orderBy:{id:"asc"}}),audits);
     assert.deepEqual(await db.acquisitionCommit.findUniqueOrThrow({where:{id:openerReceipt.id},include:{members:true}}),receiptBefore);
     console.log("PASS: explicit batch/per-card opener, legacy Unknown and saved-provenance preservation, missing/foreign refusal, exact preview/three lots/five memberships and replay");
+    const allDestination=await location(4),all=await capture(allDestination,3);
+    await review(all.id,all.photos[0].id);await review(all.id,all.photos[1].id);await stop(all.id);
+    const allInput={locationId:allDestination,section:"A",excludedPhotoIds:[all.photos[0].id]};
+    await assert.rejects(previewConfirmedAcquisitionCommit(db,stranger,all.id,allInput),/unavailable|permission|owner|access/i);
+    const allPreview=await previewConfirmedAcquisitionCommit(db,actor,all.id,allInput);
+    assert.equal(allPreview.count,1);assert.equal(allPreview.cards[0].photoId,all.photos[1].id);
+    assert.deepEqual(allPreview.excluded,[{reason:"Unsaved corrections",count:1}]);
+    const frozen={photoIds:allPreview.cards.map(c=>c.photoId),locationId:allDestination,section:"A",requestKey:randomUUID(),previewToken:allPreview.token,overfillReason:null};
+    await review(all.id,all.photos[2].id);
+    await assert.rejects(commitAcquisitionCards(db,actor,all.id,frozen),/preview changed/i);
+    const refreshed=await previewConfirmedAcquisitionCommit(db,actor,all.id,allInput);assert.equal(refreshed.count,2);
+    const allRequest={...frozen,photoIds:refreshed.cards.map(c=>c.photoId),requestKey:randomUUID(),previewToken:refreshed.token};
+    const allAdded=await commitAcquisitionCards(db,actor,all.id,allRequest);assert.equal(allAdded.count,2);
+    assert.equal((await commitAcquisitionCards(db,actor,all.id,allRequest)).replay,true);
+    assert.equal((await previewConfirmedAcquisitionCommit(db,actor,all.id,{...allInput,excludedPhotoIds:[]})).count,1);
+    console.log("PASS: all-confirmed selection excludes drafts/pending/added, checks ownership, freezes approval and replays without duplicates");
   } finally {
     await db.importBatchItem.deleteMany({ where: { importBatchId: { in: importBatches } } });
     await db.importBatch.deleteMany({ where: { id: { in: importBatches } } });

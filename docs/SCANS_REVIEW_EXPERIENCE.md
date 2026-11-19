@@ -73,3 +73,28 @@ single Chromium worker and base URL `http://127.0.0.1:13275`. The regression res
 only this fixture's reviews between widths and requires zero Inventory additions
 and unchanged original metadata. Retire only the owned fixture resources after
 recording results; the ordinary installation is not a test target.
+
+## Follow-up: bulk confirmation and Inventory clicks
+
+Brian explicitly requested clear reasons for bulk exclusions and one final
+confirmation for all currently confirmed cards, with box/section visible at a
+glance. This extends the same coherent PR1049; earlier results above are historical
+and do not qualify the changed source until the follow-up checks pass.
+
+Bulk exclusions remain deliberate for unsaved edits, absent proposals, incomplete
+saved reviews, missing attributes and readable language conflicts. A concrete
+loader defect discarded successful peers and aborted later groups when one
+proposal request failed. Independent settled results now keep those peers and
+identify failed reads for retry. Case-normalized language comparison avoids a
+format-only conflict; actual conflicting evidence still requires individual review.
+Exclusion reasons remain visible after partial confirmation with direct inspection.
+
+The normal Inventory path is now Add all confirmed cards -> one confirmation
+showing copy count, box, section and capacity. The server discovers ready cards
+across bounded review pages and freezes the exact selection through the existing
+preview token. Unsaved corrections, physical blockers and already added cards are
+excluded; no extra confirmation click is needed to select/prepare the normal set.
+The former500-copy operation ceiling is removed. Owner, current-photo/count,
+capacity/overfill, stale-preview, atomic rollback and same-request replay checks
+remain. Per-card choices stay under an optional disclosure. No production or
+physical scanner operation is authorized by this UI follow-up.

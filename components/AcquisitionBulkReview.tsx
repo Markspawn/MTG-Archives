@@ -5,6 +5,9 @@ import type { acquisitionProgressDto } from "@/lib/acquisition-api";
 import {acquisitionPreferredPrinting, acquisitionOpenerName, type AcquisitionOpenerChoice, type AcquisitionCardReview, type AcquisitionDefaults} from "@/lib/acquisition-review";
 import { finishForPrinting } from "@/lib/acquisition-finish";
 import { BulkReviewUncertainError, saveBulkReview } from "./acquisition-bulk-save";
+import {acquisitionBulkReviewBlock} from "@/lib/acquisition-bulk-review";
+import {acquisitionReviewComplete} from "@/lib/acquisition-review-display";
+import {AcquisitionScanImage} from "./AcquisitionScanInspection";
 import { filterButtonClass as button, filterPrimaryButtonClass as primary, filterPanelClass as panel } from "./filterStyles";
 
 type Slot = ReturnType<typeof acquisitionProgressDto>["slots"][number];
@@ -27,6 +30,7 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
   const [target, setTarget] = useState(0);
   const [rows, setRows] = useState<Proposal[]>([]);
   const [error, setError] = useState("");
+  const [loadFailures, setLoadFailures] = useState<{photoId:string;position:number;reason:string}[]>([]);
   const [visible, setVisible] = useState(12);
   const more = useRef<HTMLDivElement>(null);
   const previewRequest = useRef<AbortController | null>(null);
@@ -46,7 +50,7 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
     setLoading(false); setOpen(false); onOpenChange?.(false);
   }
   const awaiting = slots.flatMap(slot => {
-    const photo = slot.photos.find(p => p.ready && !p.purgedAt);
+    const photo = slot.photos.find(p => p.ready && !p.purgedAt && p.generation===slot.generation);
     return photo && !slot.review && !slot.committed ? [{ photoId: photo.id, position: slot.position + 1 }] : [];
   });
   const available = awaiting.filter(item => !blockedPhotos.has(item.photoId));
@@ -58,11 +62,13 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
     previewRequest.current = controller;
     const current = () => previewRequest.current === controller && !controller.signal.aborted;
     setOpen(true); onOpenChange?.(true); setVisible(12); setLoading(true); setError(""); setLoaded(0); setPreviewTotal(available.length); setSaved(0); setRows([]);
+    setLoadFailures([]);
     let count = 0;
     try {
       // Bounded requests keep large feeder batches from flooding the worker.
       for (let index = 0; index < available.length; index += 4) {
-        const group = await Promise.all(available.slice(index, index + 4).map(async item => {
+        const items = available.slice(index, index + 4);
+        const group = await Promise.allSettled(items.map(async item => {
           const response = await fetch(`/api/acquisition/${batchId}/review?photoId=${item.photoId}`, { cache: "no-store", signal: controller.signal });
           if (!response.ok) throw new Error("Could not load current match proposals. Retry the preview.");
           const record = await response.json() as AcquisitionCardReview;
@@ -76,20 +82,27 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
         if (!current()) return;
         count += group.length; setLoaded(count);
         // Append to current state so subsequent groups keep operator edits.
-        setRows(previous => current() ? [...previous, ...group] : previous);
+        setRows(previous => current() ? [...previous, ...group.flatMap(result=>result.status==="fulfilled"?[result.value]:[])] : previous);
+        setLoadFailures(previous => [...previous,...group.flatMap((result,i)=>result.status==="rejected"?
+          [{...items[i],reason:"Proposal could not be loaded. Reload proposals to retry this card; other cards can still be confirmed."}]:[])]);
       }
     } catch (cause) {
       if (current()) setError((cause as Error).message);
     } finally { if (current()) setLoading(false); }
   }
   const choice = (row: Proposal) => acquisitionPreferredPrinting(row.record);
-  const readableLanguageConflict = (row: Proposal) => Boolean(defaults.language &&
-    row.record.evidence?.identifiers.languages.some(language=>language!==defaults.language));
-  const eligible = (row: Proposal) => {
-    const printing = choice(row);
-    return Boolean(draftsReady && !blockedPhotos.has(row.photoId) && printing && !row.record.review && !row.saved && printing.lang && defaults.condition &&
-      (!defaults.language||printing.lang.toLowerCase()===defaults.language) && !readableLanguageConflict(row) && finishForPrinting(defaults.finish, printing));
-  };
+  const blockReason = (row: Proposal) => acquisitionBulkReviewBlock(row.record,defaults,blockedPhotos.has(row.photoId));
+  const eligible = (row: Proposal) => draftsReady && !row.saved && !blockReason(row);
+  const exclusions = [...new Map([
+    ...awaiting.filter(item=>blockedPhotos.has(item.photoId)).map(item=>({...item,reason:"Unsaved correction: save or cancel it first."})),
+    ...slots.flatMap(slot=>slot.review && !slot.committed && !acquisitionReviewComplete(slot)?
+      [{position:slot.position+1,photoId:slot.photos[0]?.id??"",reason:"The saved review is incomplete. Finish its details individually; batch defaults do not overwrite saved card choices."}]:[]),
+    ...slots.flatMap(slot=>!slot.committed && !slot.review && !slot.photos.some(photo=>photo.ready && !photo.purgedAt && photo.generation===slot.generation)?
+      [{position:slot.position+1,photoId:slot.photos[0]?.id??slot.id,reason:"No current saved scan is available. Wait for the upload or check the card's photo."}]:[]),
+    ...rows.flatMap(row=>!row.saved && !row.record.review && (row.error || blockReason(row)) ?
+      [{photoId:row.photoId,position:row.position,reason:row.error || blockReason(row)!}]:[]),
+    ...loadFailures,
+  ].map(item=>[item.photoId,item])).values()];
   const selected = rows.filter(row => row.checked && eligible(row));
   const pending = rows.filter(row => row.pendingConfirmation);
   async function confirm(resume = false) {
@@ -142,7 +155,7 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
       if (done > 0 && !next.some(row => row.error || row.pendingConfirmation)) { close(); onConfirmed?.(next.filter(row => row.saved).map(row => row.photoId)); }
     } finally { setSaved(next.filter(row => row.saved).length); confirming.current = false; setSaving(false); }
   }
-  return <section className={panel + " min-w-0 space-y-3"} aria-label="Bulk match review">
+  return <section id="scan-bulk-review" className={panel + " min-w-0 space-y-3 scroll-mt-[var(--scan-scroll-offset,14rem)]"} aria-label="Bulk match review">
     <div className="flex flex-wrap items-center gap-2">
       <button className={button} disabled={!draftsReady || loading || saving || pending.length > 0 || !available.length} onClick={() => void preview()}>
         Bulk Confirm Match
@@ -156,6 +169,15 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
     </div>}
     {!draftsReady && <p role="status" className="text-sm">Bulk review is waiting for browser draft access. Allow browser storage and reload; individual reviews can still be saved.</p>}
     {skipped > 0 && <p role="status" className="text-sm">{skipped} {skipped === 1 ? "card has an unsaved correction" : "cards have unsaved corrections"} and will be skipped. Save or cancel those corrections to include them.</p>}
+    {exclusions.length > 0 && <details open={!loading} className="text-sm">
+      <summary className="cursor-pointer font-medium">Why {exclusions.length} {exclusions.length===1?"card needs":"cards need"} individual attention</summary>
+      <ul className="mt-2 max-h-60 overflow-y-auto space-y-2">
+        {exclusions.map(item=><li key={`${item.photoId}:${item.reason}`}>
+          <strong>Card {item.position}:</strong> {item.reason}{" "}
+          <button type="button" className="underline" disabled={saving} onClick={()=>{close();onInspect?.(item.position);}}>Inspect card {item.position}</button>
+        </li>)}
+      </ul>
+    </details>}
     {open && <div className="space-y-3">
       <p className="text-sm">Compare each scan with its proposed printing. Every proposal starts selected; clear any that needs individual correction. This saves reviews only. Inventory is a separate step.</p>
       <p className="text-sm">Batch defaults: {defaults.finish.toLowerCase()} · {defaults.condition ?? "condition unset"} · {defaults.language?.toUpperCase()??"language from printing evidence"} · Original opener: {acquisitionOpenerName(defaults.openerPlayerId, openerChoices)}. Cards in a different language need individual review. Change batch defaults or correct a card before confirming if these do not apply.</p>
@@ -189,14 +211,13 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
                 }}>Inspect or correct</a>
               </div>
               {printing && <p className="text-sm">{printing.setCode.toUpperCase()} #{printing.collectorNumber} · {printing.lang?.toUpperCase() ?? "language unknown"} · {row.record.recognitionStatus.replaceAll("_", " ").toLowerCase()}</p>}
-              {!row.pendingConfirmation && readableLanguageConflict(row) && <p className="text-sm">Readable language conflicts with the batch language. Inspect or correct this card individually.</p>}
+              {!row.pendingConfirmation && !row.saved && blockReason(row) && <p className="text-sm">{blockReason(row)}</p>}
               {row.pendingConfirmation && <p className="text-sm">Original confirmation: {row.pendingConfirmation.finish.toLowerCase()} · {row.pendingConfirmation.condition} · {row.pendingConfirmation.language?.toUpperCase()??printing?.lang?.toUpperCase()??"language unknown"} · Original opener: {row.pendingConfirmation.openerName ?? "Unknown"}. Later default changes do not alter this confirmation.</p>}
               {proposedFinish && proposedFinish !== defaults.finish && <p className="text-sm">This printing supports only {proposedFinish.toLowerCase()}; bulk review will use that finish.</p>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-w-3xl">
-                <img loading="lazy" className="w-full max-h-96 object-contain bg-black/10" src={`/api/acquisition/${batchId}/photos/${row.photoId}`} alt={`Scan of card ${row.position}`} />
+              <div className="grid grid-cols-2 gap-2 mt-2 max-w-3xl">
+                <AcquisitionScanImage src={`/api/acquisition/${batchId}/photos/${row.photoId}`} evidence={row.record.evidence} active position={row.position} compact />
                 {printing?.imageUri ? <img loading="lazy" className="w-full max-h-96 object-contain bg-black/10" src={printing.imageUri} alt={`Proposed ${printing.name}`} /> : <span>No printing image</span>}
               </div>
-              {!canSelect && !row.record.review && !row.saved && <p className="text-sm">{blockedPhotos.has(row.photoId) ? "Unsaved correction: save or cancel it before bulk confirmation." : printing ? "This printing needs a finish or language correction before confirmation." : "Wait for a proposal or find the printing manually."}</p>}
               {row.error && <p role="alert" className="text-sm">{row.error}</p>}
               {(row.record.review || row.saved) && <p className="text-sm">Review saved</p>}
             </div>;

@@ -5,7 +5,6 @@ export const acquisitionCommitSelectionSchema = z
     photoIds: z
       .array(z.string().uuid())
       .min(1)
-      .max(500)
       .refine(
         (ids) => new Set(ids).size === ids.length,
         "Choose each card once",
@@ -39,6 +38,8 @@ export type AcquisitionCommitPreview = {
     remaining: number | null;
   };
   overfill: number;
+  scope?: "confirmed";
+  excluded?: {reason: string; count: number}[];
   cards: {
     photoId: string;
     position: number;
