@@ -1089,7 +1089,7 @@ export function AcquisitionPhotoReview({
                     · {selected.lang?.toUpperCase() ?? "Language unknown"}
                   </p>
                 )}
-                {!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") && <p className="text-xs mt-1" data-testid="scan-name-only">Name only; check the exact printing.</p>}
+                <p className={`${reviewStyles.hint} text-xs mt-1 min-h-4`} data-testid={!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "scan-name-only" : undefined}>{!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "Name only; check the exact printing." : null}</p>
                 <p
                   className="text-xs mt-1"
                   role="status"
@@ -1146,20 +1146,20 @@ export function AcquisitionPhotoReview({
                 <p className="text-xs mt-1 break-words">Original opener: {acquisitionOpenerName(openerPlayerId, openerChoices)}</p>
                 {quickFinish}
                 {!committed && (
-                  <div className="flex flex-wrap gap-2 mt-2 min-h-[84px] content-start">
-                    {(!record.review || draftDirty) && !showEditor && (
+                  <div className={`flex flex-wrap gap-2 mt-2 min-h-[84px] content-start ${reviewStyles.actions}`}>
+                    {!showEditor && (
                       <>
                       {focused && onNextAwaiting && <button className={primary}
-                        disabled={busy || regionEditing || !canConfirm}
-                        onClick={() => void submit("accept", true)}>
-                        {draftDirty ? "Save and next" : "Confirm and next"}
+                        disabled={busy || regionEditing || ((!record.review || draftDirty) && !canConfirm)}
+                        onClick={() => record.review && !draftDirty ? onNextAwaiting?.() : void submit("accept", true)}>
+                        {record.review && !draftDirty ? "Next awaiting review" : draftDirty ? "Save and next" : "Confirm and next"}
                       </button>}
                       <button
                         className={focused ? button : primary}
-                        disabled={busy || regionEditing || !canConfirm}
+                        disabled={busy || regionEditing || !canConfirm || (!!record.review && !draftDirty)}
                         onClick={() => void submit("accept")}
                       >
-                        {draftDirty ? "Save card review" : "Confirm match"}
+                        {record.review && !draftDirty ? canConfirm ? "Confirmed" : "Needs details" : draftDirty ? "Save card review" : "Confirm match"}
                       </button>
                       </>
                     )}
@@ -1178,7 +1178,7 @@ export function AcquisitionPhotoReview({
                         Cancel changes
                       </button>
                     )}
-                    {!showEditor && onNextAwaiting && <button className={button} disabled={busy || regionEditing}
+                    {!showEditor && onNextAwaiting && (!focused || !record.review || draftDirty) && <button className={button} disabled={busy || regionEditing}
                       onClick={onNextAwaiting}>Next awaiting review</button>}
                     {!canConfirm && !showEditor && (
                       <p className="text-xs">

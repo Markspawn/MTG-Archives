@@ -60,10 +60,13 @@ for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:19
   await expect(page.getByTestId("scan-batch-destination")).toContainText("Section A");
   expect(await page.getByTestId("scan-batch-destination").evaluate(e=>e.getBoundingClientRect().top>=0)).toBe(true);
   await page.screenshot({path:testInfo.outputPath("focused-desktop.png")});
+  const correctionBefore=await first.getByRole("button",{name:"Correct",exact:true}).boundingBox();
   await stableViewport(page,async()=>{
     await first.getByRole("button",{name:"Confirm match",exact:true}).click();
     await expect(first.getByTestId("scan-compact-status")).toHaveText("Review saved");
   });
+  const correctionAfter=await first.getByRole("button",{name:"Correct",exact:true}).boundingBox();
+  expect(Math.abs(correctionBefore!.x-correctionAfter!.x)).toBeLessThan(1);expect(Math.abs(correctionBefore!.y-correctionAfter!.y)).toBeLessThan(1);
   await stableViewport(page,async()=>{
     await page.getByRole("button",{name:"Next card",exact:true}).click();
     await expect(page.getByTestId("capture-card-2").getByRole("button",{name:"Confirm and next",exact:true})).toBeEnabled();
