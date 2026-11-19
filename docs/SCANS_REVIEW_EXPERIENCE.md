@@ -98,3 +98,36 @@ The former500-copy operation ceiling is removed. Owner, current-photo/count,
 capacity/overfill, stale-preview, atomic rollback and same-request replay checks
 remain. Per-card choices stay under an optional disclosure. No production or
 physical scanner operation is authorized by this UI follow-up.
+
+### Follow-up qualification and current-batch scope
+
+Brian clarified that adding confirmed cards must operate only on the batch being
+viewed. Seven current production-mode browser cases pass: the three original
+comparison/draft cases and four bulk/Inventory cases across1366/390/320 plus a
+501-copy/six-page case. A neighboring batch with501 ready cards remains untouched
+while eight confirmed cards from the viewed batch are added. The ordinary path
+uses Add all confirmed cards and the final count/box/section confirmation; neither
+manual selection nor a separate preview click is needed. The final Add button is
+visible without scrolling at the tested viewport sizes. An interrupted response
+after the real commit recovers through the identical request and returns one
+receipt, with no duplicate Inventory copies.
+
+The source-bound production build, types, changed-file lint and34 focused
+exclusion/draft/navigation/reload controls pass. Required PostgreSQL ownership,
+concurrency, rollback/replay and new all-confirmed exclusion/stale-preview checks
+are exercised by CI. Full current-head CI/readiness is recorded on PR1049.
+Compiled product head is e3768ad0; subsequent edits update evidence only.
+
+The initial follow-up fixture declaration/type errors, disposable runtime export
+assumption and intercepted-response teardown failure remain private evidence.
+An additional real navigation regression was reproduced: Inspect from an open
+Inventory panel left the card list hidden. Inspection now closes that panel and
+reveals the physical card; all three viewport cases pass the direct return check.
+Earlier failed intervals remain failures, separately from their corrected passes.
+
+A named local sample-data review installation remains active at13285. Its web,
+database, original scans and current image are protected; temporary build/browser
+containers and superseded images are retired and the exact heavy-runtime claim
+released. The regular local installation and production remain unchanged. The
+preview uses generated data and establishes no optical/physical throughput or
+reporter acceptance. Individual merge approval and deployment remain separate.
