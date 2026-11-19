@@ -1,4 +1,5 @@
 "use client";
+import reviewStyles from "./AcquisitionReview.module.css";
 import {AcquisitionLanguageSelect} from "./AcquisitionLanguageSelect";
 import { acquisitionReviewProgress } from "@/lib/acquisition-processing-status";
 import { acquisitionCatalogMessage } from "@/lib/acquisition-catalog-status";
@@ -303,7 +304,7 @@ export function AcquisitionPhotoReview({
     // to be enabled, but leave focus alone if the user moved to another card.
     const focused = document.activeElement;
     if (focused !== document.body && !root.current?.contains(focused)) return;
-    (mode === "simple" ? correctionButton.current : searchInput.current)?.focus();
+    (mode === "simple" ? correctionButton.current : searchInput.current)?.focus({preventScroll: true});
   }, [busy, editing, mode]);
   function markDirty() {
     evidenceTokens.current.edit ??= record?.evidenceToken;
@@ -872,8 +873,8 @@ export function AcquisitionPhotoReview({
   return (
     <div
       ref={root}
-      className="min-w-0"
-      style={{ minHeight: record ? undefined : simple ? 200 : 560 }}
+      className={`min-w-0 ${simple && focused ? reviewStyles.review : ""}`}
+      style={{ minHeight: record || (simple && focused) ? undefined : simple ? 200 : 560 }}
       onKeyDown={event => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !committed) {
           event.preventDefault();
@@ -890,11 +891,11 @@ export function AcquisitionPhotoReview({
         </div>
       )}
       {draftWarning && <p role="status" className="text-sm mb-2">{draftWarning}</p>}
-      {record && !record.review && record.defaults.language && record.evidence?.identifiers.languages.some(
+      {!simple && record && !record.review && record.defaults.language && record.evidence?.identifiers.languages.some(
         language=>language.toLowerCase()!==record.defaults.language) && <p role="status" className="text-sm mb-2">
         Readable language conflicts with the confirmed batch language. Check this card and choose its correct printing before saving.
       </p>}
-      {record && <p className="text-sm mb-2 break-words">Original opener: {acquisitionOpenerName(openerPlayerId, openerChoices)}</p>}
+      {record && !simple && <p className="text-sm mb-2 break-words">Original opener: {acquisitionOpenerName(openerPlayerId, openerChoices)}</p>}
       {!record ? (
         <p role="status">
           {active ? "Loading card review…" : "Card review loads as you scroll."}
@@ -902,7 +903,7 @@ export function AcquisitionPhotoReview({
       ) : (
         <>
           <p
-            className="text-sm font-semibold mb-3"
+            className={simple ? "text-xs font-medium mb-2" : "text-sm font-semibold mb-3"}
             data-testid="scan-review-status"
           >
             {committed
@@ -912,7 +913,7 @@ export function AcquisitionPhotoReview({
               : record.review?.source === "AUTO_STRONG_MATCH"
                 ? "Automatically confirmed · correct below if needed"
                 : record.review
-                  ? "Reviewed · editable until Inventory commit"
+                  ? "Reviewed · not yet added to Inventory"
                   : processing.problem
                     ? processing.label + " · review manually"
                   : record.recognitionStatus === "STRONG_MATCH"
@@ -995,15 +996,9 @@ export function AcquisitionPhotoReview({
             suggestedRegion={record.evidence?.scannerLayout?.region ?? acquisitionReferenceBoundary(record.evidence?.printing, selected?.id)}
             suggestedSource={record.evidence?.scannerLayout?.region ? "scanner" : "reference"}
             apply={repairRegion} cancel={() => {setRegionEditing(false); onDirtyChange?.(photoId, dirty.current);}} />}
-          <div
-            className={
-              simple
-                ? focused
-                  ? "grid grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(240px,0.85fr)] gap-3 sm:gap-5 min-w-0"
-                  : "grid grid-cols-2 gap-3 min-w-0"
-                : "grid grid-cols-2 gap-3 sm:gap-6 min-w-0"
-            }
-          >
+          <div className={simple
+            ? `${reviewStyles.comparison} ${focused ? reviewStyles.focused : reviewStyles.list}`
+            : "grid grid-cols-2 gap-3 sm:gap-6 min-w-0"} data-testid="scan-comparison">
             <AcquisitionScanImage
               src={`/api/acquisition/${batchId}/photos/${photoId}`}
               evidence={record.evidence}
@@ -1021,14 +1016,15 @@ export function AcquisitionPhotoReview({
                 }
               >
                 {record.review ? "Selected printing" : "Proposed printing"}
-                {!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") && (
+                {!simple && !record.review && reasons.includes("UNLOCALIZED_NAME_HINT") && (
                   <span className="block text-xs font-normal mt-1" data-testid="scan-name-only">
                     Name only · check printing
                   </span>
                 )}
               </figcaption>
               <div
-                className={`aspect-[1000/1397] flex items-center justify-center bg-black/10 rounded overflow-hidden ${simple ? "max-h-[60vh]" : "max-h-[75vh]"}`}
+                className={simple ? reviewStyles.media : "aspect-[1000/1397] flex items-center justify-center bg-black/10 rounded overflow-hidden max-h-[75vh]"}
+                data-testid="printing-comparison-frame"
               >
                 {simple && !committed ? (
                   <button
@@ -1083,7 +1079,7 @@ export function AcquisitionPhotoReview({
               )}
             </figure>
             {simple && (
-              <div className={`min-w-0 col-span-2 ${focused ? "xl:col-span-1" : ""} self-start`}>
+              <div className="min-w-0 col-span-2 lg:col-span-1 self-start">
                 <p className="font-semibold break-words">
                   {selected?.name ?? "No proposed printing yet"}
                 </p>
@@ -1093,6 +1089,7 @@ export function AcquisitionPhotoReview({
                     · {selected.lang?.toUpperCase() ?? "Language unknown"}
                   </p>
                 )}
+                <p className={`${reviewStyles.hint} text-xs mt-1 min-h-4`} data-testid={!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "scan-name-only" : undefined}>{!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "Name only; check the exact printing." : null}</p>
                 <p
                   className="text-xs mt-1"
                   role="status"
@@ -1146,22 +1143,23 @@ export function AcquisitionPhotoReview({
                     : finish.toLowerCase()}{" "}
                   · {condition || "Choose condition"}
                 </p>
+                <p className="text-xs mt-1 break-words">Original opener: {acquisitionOpenerName(openerPlayerId, openerChoices)}</p>
                 {quickFinish}
                 {!committed && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(!record.review || draftDirty) && !showEditor && (
+                  <div className={`flex flex-wrap gap-2 mt-2 min-h-[84px] content-start ${reviewStyles.actions}`}>
+                    {!showEditor && (
                       <>
                       {focused && onNextAwaiting && <button className={primary}
-                        disabled={busy || regionEditing || !canConfirm}
-                        onClick={() => void submit("accept", true)}>
-                        {draftDirty ? "Save and next" : "Confirm and next"}
+                        disabled={busy || regionEditing || ((!record.review || draftDirty) && !canConfirm)}
+                        onClick={() => record.review && !draftDirty ? onNextAwaiting?.() : void submit("accept", true)}>
+                        {record.review && !draftDirty ? "Next awaiting review" : draftDirty ? "Save and next" : "Confirm and next"}
                       </button>}
                       <button
                         className={focused ? button : primary}
-                        disabled={busy || regionEditing || !canConfirm}
+                        disabled={busy || regionEditing || !canConfirm || (!!record.review && !draftDirty)}
                         onClick={() => void submit("accept")}
                       >
-                        {draftDirty ? "Save card review" : "Confirm match"}
+                        {record.review && !draftDirty ? canConfirm ? "Confirmed" : "Needs details" : draftDirty ? "Save card review" : "Confirm match"}
                       </button>
                       </>
                     )}
@@ -1180,7 +1178,7 @@ export function AcquisitionPhotoReview({
                         Cancel changes
                       </button>
                     )}
-                    {!showEditor && onNextAwaiting && <button className={button} disabled={busy || regionEditing}
+                    {!showEditor && onNextAwaiting && (!focused || !record.review || draftDirty) && <button className={button} disabled={busy || regionEditing}
                       onClick={onNextAwaiting}>Next awaiting review</button>}
                     {!canConfirm && !showEditor && (
                       <p className="text-xs">
@@ -1190,6 +1188,10 @@ export function AcquisitionPhotoReview({
                     )}
                   </div>
                 )}
+                {record && !record.review && record.defaults.language && record.evidence?.identifiers.languages.some(
+        language=>language.toLowerCase()!==record.defaults.language) && <p role="status" className="text-sm mb-2">
+        Readable language conflicts with the confirmed batch language. Check this card and choose its correct printing before saving.
+      </p>}
                 {correctionEditor}
               </div>
             )}

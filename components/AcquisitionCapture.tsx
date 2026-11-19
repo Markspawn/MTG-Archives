@@ -1,4 +1,5 @@
 "use client";
+import reviewStyles from "./AcquisitionReview.module.css";
 import {AcquisitionLanguageSelect} from "./AcquisitionLanguageSelect";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -165,24 +166,14 @@ export function AcquisitionCapture({
       captureRoot.current?.style.setProperty("--scan-scroll-offset", `${height + (cardNavigator.current?.getBoundingClientRect().height ?? 0) + 24}px`);
     }
   }, []);
-  const keepReviewTargetClear = useCallback(() => {
-    measureScrollOffset();
-    const target = document.activeElement;
-    // A successful save can grow the sticky Inventory action, especially on a
-    // phone. Reposition only our focused card row; never move a user's editor.
-    if (target instanceof HTMLElement && target.id.startsWith("capture-card-") && captureRoot.current?.contains(target)) {
-      const bottom = cardNavigator.current?.getBoundingClientRect().bottom ?? progressPanel.current?.getBoundingClientRect().bottom ?? 0;
-      if (target.getBoundingClientRect().top < bottom + 8) target.scrollIntoView({block:"start"});
-    }
-  }, [measureScrollOffset]);
   useLayoutEffect(() => {
     const summary = progressPanel.current;
     if (!summary) return;
     measureScrollOffset();
-    const observer = new ResizeObserver(keepReviewTargetClear);
+    const observer = new ResizeObserver(measureScrollOffset);
     observer.observe(summary);
     return () => observer.disconnect();
-  }, [batchId, hasProgress, measureScrollOffset, keepReviewTargetClear]);
+  }, [batchId, hasProgress, measureScrollOffset]);
   function scrollScanTarget(target: HTMLElement | null) {
     // A state change can grow the summary before ResizeObserver's next turn.
     // Read its current layout immediately before a programmatic jump.
@@ -223,10 +214,10 @@ export function AcquisitionCapture({
     measureScrollOffset();
     const navigator = cardNavigator.current;
     if (!navigator) return;
-    const observer = new ResizeObserver(keepReviewTargetClear);
+    const observer = new ResizeObserver(measureScrollOffset);
     observer.observe(navigator);
     return () => observer.disconnect();
-  }, [reviewLayout, hasProgress, measureScrollOffset, keepReviewTargetClear]);
+  }, [reviewLayout, hasProgress, measureScrollOffset]);
   function chooseReviewLayout(layout: "focus" | "list") {
     setReviewLayout(layout);
     try { localStorage.setItem(`mtg-acquisition-review-layout:${userId}`, layout); } catch { /* Session remains usable. */ }
@@ -291,14 +282,20 @@ export function AcquisitionCapture({
     setFocusedSlotId(focusedId);
     setVisitedSlots(previous => previous.has(focusedId) ? previous : new Set([...previous, focusedId]));
   }, [reviewLayout, focusedId]);
-  function revealCard(position: number) {
+  function revealCard(position: number, alignToStart = false) {
     const slot = progress?.slots.find(slot => slot.position === position);
     if (!slot) return;
     setFocusedSlotId(slot.id);
     setVisibleCount(count => Math.max(count, (progress?.slots.indexOf(slot) ?? 0) + 1));
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const row = document.getElementById(`capture-card-${position + 1}`);
-      scrollScanTarget(row); row?.focus({ preventScroll: true });
+      measureScrollOffset();
+      const top = row?.getBoundingClientRect().top;
+      const clearTop = (cardNavigator.current?.getBoundingClientRect().bottom ?? progressPanel.current?.getBoundingClientRect().bottom ?? 0) + 8;
+      // Moving between equally sized cards should keep the user's viewport still.
+      // Only reveal a target that is actually outside the usable viewport.
+      if (alignToStart || (top !== undefined && (top < clearTop - 1 || top > window.innerHeight - 80))) scrollScanTarget(row);
+      row?.focus({ preventScroll: true });
     }));
   }
   const [reviewNavigation, setReviewNavigation] = useState("");
@@ -943,53 +940,44 @@ export function AcquisitionCapture({
             style={{ background: "var(--app-surface)" }}
             aria-label="Batch progress"
           >
-            <h2 className="text-xl font-semibold">
-              Batch {progress.batchNumber} · {progress.reservedSlots}
-              {progress.providerId === SCANNER_CAPTURE_PROVIDER ? ` ${progress.reservedSlots === 1 ? "image" : "images"}` : progress.target === null
-                ? " cards"
-                : ` of ${progress.target} cards`}
-            </h2>
-            <p className="text-base sm:text-lg font-medium" data-testid="scan-batch-destination">
-              Inventory destination: <strong>{locations.find(location=>location.id===saveDestination.locationId)?.name ?? "Choose a box"}</strong>
-              {" → "}<strong>{saveDestination.section || "No section"}</strong>
-            </p>
-            <p role="status" aria-live="polite">
-              {uploads.filter((p) => p.status !== "failed").length} uploading ·{" "}
-              On this page: {readyPhotos} {readyPhotos === 1 ? "photo" : "photos"} saved · {prepared} {prepared === 1 ? "photo" : "photos"} prepared
-            </p>
-            <p className="text-sm">
-              On this page: {reviewCounts.ready} ready to preview ·{" "}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <h2 className="text-base font-semibold">Batch {progress.batchNumber} <span className="text-xs font-normal">{progress.reservedSlots} saved</span></h2>
+                <p className="text-sm" data-testid="scan-batch-destination">
+                  Inventory destination: <strong>{locations.find(location=>location.id===saveDestination.locationId)?.name ?? "Choose a box"}</strong>
+                  {" \u2192 "}<strong>{saveDestination.section || "No section"}</strong>
+                </p>
+              </div>
+              {cachedDrafts.ready && <a className={primary + " inline-flex max-w-full text-sm whitespace-normal"} href="#scan-inventory" onClick={event => { event.preventDefault(); showInventory(); }}>
+                Add all confirmed cards to Inventory
+              </a>}
+            </div>
+            <p className="text-xs tabular-nums" data-testid="scan-review-summary">
+              {reviewCounts.ready} ready to preview ·{" "}
               {reviewCounts.awaiting} pending review or reconciliation · {reviewCounts.added} added
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-2" aria-label="Batch actions">
-            <a className={button} href={`/imports/batches?q=${progress.batchNumber}&view=all`}>Manage batch</a>
-            <button type="button" className={button} onClick={() => {
+            <div className="flex flex-wrap items-center gap-2 mt-1" aria-label="Batch actions">
+            <a className={button + " !px-2 !py-1 text-xs"} href={`/imports/batches?q=${progress.batchNumber}&view=all`}>Manage batch</a>
+            <button type="button" className={button + " !px-2 !py-1 text-xs"} onClick={() => {
               const settings = document.getElementById("scan-defaults") as HTMLDetailsElement | null;
               if (settings) { settings.open = true; scrollScanTarget(settings); }
             }}>Batch settings</button>
-            <button type="button" className={button} onClick={() => {
+            <button type="button" className={button + " !px-2 !py-1 text-xs"} onClick={() => {
               const capture = document.getElementById("scan-capture") as HTMLDetailsElement | null;
               if (capture) { capture.open = true; scrollScanTarget(capture); }
             }}>Capture controls</button>
             {!!readyPhotos && !bulkOpen && (
-              <a className={button + " inline-flex text-sm"} href="#scan-review" onClick={event=>{
+              <a className={button + " inline-flex !px-2 !py-1 text-xs"} href="#scan-review" onClick={event=>{
                 event.preventDefault();setInventoryOpen(false);
-                requestAnimationFrame(()=>scrollScanTarget(document.getElementById("scan-review")));
+                requestAnimationFrame(() => {
+                  if (reviewLayout === "focus" && focusedSlot) revealCard(focusedSlot.position, true);
+                  else scrollScanTarget(document.querySelector<HTMLElement>("#scan-review [data-testid^='capture-card-']:not([hidden])") ?? document.getElementById("scan-review"));
+                });
               }}>
                 Review saved cards
               </a>
             )}
-            {cachedDrafts.ready && <a className={primary + " inline-flex max-w-full text-sm whitespace-normal"} href="#scan-inventory" onClick={event => { event.preventDefault(); showInventory(); }}>
-              Add all confirmed cards to Inventory
-            </a>}
             </div>
-            <p className="text-xs text-[var(--app-muted)]">
-              {progress.providerId === SCANNER_CAPTURE_PROVIDER ? "Check for missed or doubled cards before adding reviewed matches to Inventory." : progress.availableSlots === 0
-                ? "Batch full. You can still retry or retake a photo."
-                : progress.availableSlots === null
-                  ? "No capacity limit set. Stop capture when finished."
-                  : `${progress.availableSlots} cards remaining.`}
-            </p>
             {selection && (
               <p role="status" className="text-sm mt-2">
                 Adding {selection.added} of {selection.total} selected photos
@@ -1001,6 +989,22 @@ export function AcquisitionCapture({
               </p>
             )}
           </section>
+          <details className="text-xs">
+            <summary className="cursor-pointer">Batch activity and capacity</summary>
+            <div className="mt-2 space-y-1">
+            <p role="status" aria-live="polite">
+              {uploads.filter((p) => p.status !== "failed").length} uploading ·{" "}
+              On this page: {readyPhotos} {readyPhotos === 1 ? "photo" : "photos"} saved · {prepared} {prepared === 1 ? "photo" : "photos"} prepared
+            </p>
+            <p className="text-xs text-[var(--app-muted)]">
+              {progress.providerId === SCANNER_CAPTURE_PROVIDER ? "Check for missed or doubled cards before adding reviewed matches to Inventory." : progress.availableSlots === 0
+                ? "Batch full. You can still retry or retake a photo."
+                : progress.availableSlots === null
+                  ? "No capacity limit set. Stop capture when finished."
+                  : `${progress.availableSlots} cards remaining.`}
+            </p>
+            </div>
+          </details>
           {!progress.destinationCurrent && (
             <p role="alert">
               The destination changed. Saved photos are retained; choose a new
@@ -1201,10 +1205,10 @@ export function AcquisitionCapture({
             <section
               id="scan-review"
               hidden={bulkOpen || inventoryOpen}
-              className={panel + " scroll-mt-[var(--scan-scroll-offset,14rem)]"}
+              className={panel + " scroll-mt-[var(--scan-scroll-offset,14rem)] " + reviewStyles.workspace}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <h3 className="text-xl font-semibold">Saved cards</h3>
+              <div className="inline-flex flex-wrap items-center justify-between gap-3 mr-3 mb-2 align-middle">
+                <h3 className="text-base font-semibold">Saved cards</h3>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Review layout">
                   {(["focus", "list"] as const).map(layout => <button key={layout} type="button"
                     className={reviewLayout === layout ? primary : button} aria-pressed={reviewLayout === layout}
@@ -1230,7 +1234,7 @@ export function AcquisitionCapture({
                 {!!dirtyPhotos.size && <p>Save or discard your current edits before changing pages.</p>}
                 <p className="text-sm w-full">Filters, counts, bulk review and Inventory selection apply to this page. Scanning continues while you browse older cards.</p>
               </nav>}
-              <div className="flex flex-wrap items-end justify-between gap-3 my-3">
+              <div className="inline-flex flex-wrap items-center gap-3 mb-2 align-middle">
                 <div
                   className="flex flex-wrap gap-1"
                   role="group"
@@ -1296,28 +1300,18 @@ export function AcquisitionCapture({
                   {reviewFilter === "quality" && " These photos have clipped edges or need a crop to check."}
                   {reviewFilter === "no-match" && " Cards still being checked are not counted as no match."}
                 </p>}
-              {reviewMode === "simple" && (
-                <a className="text-sm underline" href="#scan-inventory" onClick={event => { event.preventDefault(); showInventory(); }}>
-                  Go to Inventory confirmation
-                </a>
-              )}
-              <p className="text-sm mb-3" data-testid="scan-review-summary">
-                {reviewCounts.awaiting} pending review or reconciliation · {reviewCounts.ready}{" "}
-                ready to preview · {reviewCounts.added} added.
-                {reviewMode === "simple"
-                  ? " Compare the images, confirm or correct. Advanced shows recognition evidence."
-                  : " Full recognition evidence and correction tools are shown."}{" "}
-                Confirming a match saves your review; adding copies to Inventory
-                is a separate step.
-              </p>
+              <details className="text-xs mb-2">
+                <summary className="cursor-pointer">Review help</summary>
+                <p className="mt-1">Compare the scan and printing, then confirm or correct. Confirming saves your review. Use Add all confirmed cards to Inventory when ready; its final confirmation shows the box and section. Advanced shows recognition evidence.</p>
+              </details>
               {!!dirtyPhotos.size && (
                 <p className="text-sm mb-3" role="status">
                   Unsaved edits are kept when you change cards, filters or views. Choose a card to return to its correction.
                 </p>
               )}
-              {reviewNavigation && <p role="status" className="text-sm mb-3">{reviewNavigation}</p>}
+              <p role="status" className="text-xs min-h-5">{reviewNavigation}</p>
               {reviewLayout === "focus" && <div ref={cardNavigator}
-                className="min-w-0 mb-4 py-2 space-y-3 sticky top-[var(--scan-toolbar-offset,10rem)] z-10"
+                className="min-w-0 mb-2 py-1 sticky top-[var(--scan-toolbar-offset,10rem)] z-10"
                 style={{background:"var(--app-surface)"}} aria-label="Card navigator">
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" className={button} disabled={busyReviews.size > 0 || focusedIndex <= 0}
@@ -1325,8 +1319,8 @@ export function AcquisitionCapture({
                   <span className="text-sm" role="status">{focusedSlot ? `Card ${focusedSlot.position + 1} · ${filteredSlots.length} matching on this page` : "No matching cards on this page"}</span>
                   <button type="button" className={button} disabled={busyReviews.size > 0 || !filteredSlots.length || focusedIndex + 1 >= filteredSlots.length}
                     onClick={() => revealCard(filteredSlots[focusedIndex + 1].position)}>Next card</button>
-                  <label className="text-sm min-w-0 max-w-full">Jump to card
-                    <select className={input + " block w-full max-w-full"} value={focusedId ?? ""}
+                  <label className="text-sm min-w-0 max-w-full flex items-center gap-2 whitespace-nowrap">Jump to card
+                    <select className={input + " w-full max-w-full"} value={focusedId ?? ""}
                       disabled={busyReviews.size > 0 || !filteredSlots.length}
                       onChange={event => { const slot = filteredSlots.find(slot => slot.id === event.target.value); if (slot) revealCard(slot.position); }}>
                       {focusedSlot && focusedIndex < 0 && <option value={focusedSlot.id}>Card {focusedSlot.position + 1} · outside filter</option>}
@@ -1335,19 +1329,6 @@ export function AcquisitionCapture({
                     </select>
                   </label>
                 </div>
-                <details className="min-w-0">
-                  <summary className="cursor-pointer text-sm">Choose a card ({filteredSlots.length})</summary>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-2 max-h-60 overflow-y-auto p-1" role="group" aria-label="Cards on this page">
-                    {filteredSlots.map(slot => <button key={slot.id} type="button"
-                      className={(focusedSlot?.id === slot.id ? primary : button) + " text-left min-w-0"}
-                      aria-current={focusedSlot?.id === slot.id ? "true" : undefined} disabled={busyReviews.size > 0}
-                      onClick={() => revealCard(slot.position)}>
-                      <span className="block">Card {slot.position + 1}</span>
-                      <span className="block text-xs truncate">{slot.review?.cardName ?? "Check scan"}</span>
-                      <span className="block text-xs">{hasDraft(slot) ? "Unsaved correction" : acquisitionSlotReviewState(slot) === "ready" ? "Confirmed" : slot.committed ? "Added" : "Pending"}</span>
-                    </button>)}
-                  </div>
-                </details>
                 {focusedSlot && focusedIndex < 0 && <p className="text-sm" role="status">This card no longer matches the filter. Choose Next card to continue, or change Show cards.</p>}
               </div>}
               <div className={reviewLayout === "list" && reviewMode === "simple" ? "grid lg:grid-cols-2 items-start gap-5" : "space-y-6"}>

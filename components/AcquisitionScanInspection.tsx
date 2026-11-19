@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import reviewStyles from "./AcquisitionReview.module.css";
 import { observedScannerIdentifiers } from "@/lib/acquisition-scanner-source-text";
 import {
   cropPoint,
@@ -254,7 +255,8 @@ export function AcquisitionScanImage({
         Your scan
       </figcaption>
       <div
-        className={`aspect-[1000/1397] flex items-center justify-center bg-black/10 rounded overflow-hidden ${compact ? "max-h-[60vh]" : "max-h-[75vh]"}`}
+        className={compact ? reviewStyles.media : "aspect-[1000/1397] flex items-center justify-center bg-black/10 rounded overflow-hidden max-h-[75vh]"}
+        data-testid="scan-comparison-frame"
       >
         {activated ? (
           <canvas

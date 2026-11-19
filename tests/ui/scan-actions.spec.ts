@@ -22,7 +22,7 @@ test.beforeAll(()=>{
 });
 test.afterEach(async({page})=>{if(!page.isClosed()){await page.unrouteAll({behavior:"wait"});await page.close();}});
 for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inventory addition at ${width}px`,async({page,baseURL})=>{
-  test.setTimeout(180000);expect(baseURL).toBe("http://127.0.0.1:13285");
+  test.setTimeout(180000);expect(["http://127.0.0.1:13285","http://127.0.0.1:13295"]).toContain(baseURL);
   const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
   const other=database("return JSON.parse(require('fs').readFileSync('/tmp/scan-actions-large-fixture.json','utf8'));");
   resetBatch(f.runId);
@@ -94,7 +94,7 @@ for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inv
 });
 
 test("all confirmed covers six pages and 501 copies with one approval and replay safety",async({page,baseURL})=>{
-  test.setTimeout(180000);expect(baseURL).toBe("http://127.0.0.1:13285");
+  test.setTimeout(180000);expect(["http://127.0.0.1:13285","http://127.0.0.1:13295"]).toContain(baseURL);
   const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scan-actions-large-fixture.json','utf8'));");
   await page.context().addCookies([{name:"mtg_inventory_session",value:f.token,url:baseURL!,httpOnly:true,sameSite:"Lax"}]);
   await page.goto(`/imports/scan?batch=${f.batch}`);

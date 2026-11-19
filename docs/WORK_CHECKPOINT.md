@@ -1,4 +1,14 @@
-## Current work - scan actions follow-up - November 19, 2026
+## Current work - desktop scan review audit - November 19, 2026
+
+Owner scan-review-density-20261119 / attended-scan-review-density-20261119; branch codex/scan-review-density, PR1052 based on main b538d6e0. Brian requested an audit/fix for oversized cards, missing desktop controls, unequal images and confirmation movement; desktop browser is the priority. He subsequently explicitly approved this individual follow-up with "go ahead and push to main". Merge via PR after exact-head checks, never direct main; no production/scanner authority. Root unrelated WIP and paused John-Mark work preserved.
+
+Compiled product d3db1a74 passes source-bound production build/types, changed-file lint,23 unchanged-input helper controls and12 browser cases: four desktop sizes1366x768/1280x720/1920x1080/1024x768 with equal/aligned bounded frames and visible controls, at most2px viewport change and less than1px Correct movement; one pending two-column laptop control case; three retained draft/navigation/reload cases1366/390/320; four real Inventory8/501/neighbor/replay cases. Full audit/failed evidence: docs/SCAN_REVIEW_DESKTOP_AUDIT.md and .local-data/scan-review-density-20261119. All9 exact product-head checks pass; final test/documentation receipt head CI/readiness remains a live GitHub gate.
+
+Named isolated sample review on13295 uses copied originals/snapshot and synthetic printings; protected existing13285 preview and regular local/production installations remain unchanged. Exact runtime owner held during final verification/cleanup. Source/build inputs, resource identities, prior failures and current progress are private resources/build-inputs/progress JSON and final-* logs. Next safe step: retain a usable local sample, retire exact-owned superseded children, release the exact owner, verify final exact-head CI, merge approved PR1052 with head guard, compare main/tested trees and reconcile this checkpoint/Foundry. No issue closure/creation; related1004 retains its separate affected-installation timing scope.
+
+## Historical record - scan actions follow-up - November 19, 2026
+
+PR1049 subsequently merged with Brian's individual approval at b538d6e0; the following author-qualification record is historical.
 
 Owner scan-actions-20261119 / attended-scan-actions-20261119, laptop; branch codex/scans-review-experience and PR1049. Qualified product head e3768ad0; final metadata head/CI live on GitHub. Brian requested bulk-skip diagnosis, visible box/section and one final confirmation for confirmed cards, then clarified ONLY the batch being viewed. Original focused/two-column review remains included. No individual merge, production or physical-scanner authority granted. Root unrelated WIP and paused John-Mark reconciliation preserved; no issue creation without shared intake coordination.
 
