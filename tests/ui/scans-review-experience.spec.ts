@@ -15,6 +15,7 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   test.setTimeout(180000);
   expect(baseURL).toBe("http://127.0.0.1:13275");
   const f = database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
+  const originals=database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true,purgedAt:true}});`);
   database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:null,revision:{increment:1}}});`);
   await page.context().addCookies([{name:"mtg_inventory_session", value:f.token, url:baseURL!, httpOnly:true, sameSite:"Lax"}]);
   const endpoint = `/api/acquisition/${f.batch}/review`;
@@ -57,6 +58,7 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   reject=false;
   await first.getByRole("button",{name:"Save and next",exact:true}).click();
   await expect(second).toBeVisible(); await expect(second).toBeFocused();
+  await expect.poll(()=>second.evaluate(element=>element.getBoundingClientRect().top >= document.querySelector('[aria-label="Card navigator"]')!.getBoundingClientRect().bottom)).toBe(true);
   const saved=await (await page.request.get(`${endpoint}?photoId=${f.photos[0]}`)).json();
   expect(saved.review.condition).toBe("LP"); expect(saved.review.finish).toBe("NONFOIL");
   expect(saved.review.openerPlayerId).toBe(f.user);
@@ -70,11 +72,25 @@ for (const width of [1366, 390, 320]) test(`focused comparison and two-column ov
   await expect(page.getByTestId("capture-card-14")).toBeVisible();
   await expect(page.getByRole("button",{name:"Next card",exact:true})).toBeDisabled();
   await expect(page.getByRole("button",{name:"Previous card",exact:true})).toBeEnabled();
+  if (width===1366) {
+    for (let i=2;i<13;i++) {
+      const current=await (await page.request.get(`${endpoint}?photoId=${f.photos[i]}`)).json();
+      const response=await page.request.post(endpoint,{headers:{origin:baseURL!},data:{action:"accept",photoId:f.photos[i],revision:current.revision,
+        decision:{cardId:f.printing.id,finish:"NONFOIL",condition:"NM",language:"en",openerPlayerId:f.user}}});
+      expect(response.ok(),await response.text()).toBe(true);
+    }
+    await page.reload();
+    await page.getByRole("combobox",{name:"Jump to card",exact:true}).selectOption(f.slots[13]);
+    await page.getByTestId("capture-card-14").getByRole("button",{name:"Confirm and next",exact:true}).click();
+    await expect(page.getByText("No other cards awaiting review on this page. Check the other saved-card pages.",{exact:true})).toBeVisible();
+    await expect(page.getByTestId("capture-card-14")).toBeVisible();
+  }
   await page.getByRole("button",{name:"Batch settings",exact:true}).click();
   await expect(page.getByRole("button",{name:"Save batch defaults",exact:true})).toBeVisible();
   await page.getByRole("link",{name:"Review saved cards",exact:true}).click();
   await page.screenshot({path:`test-results/scans-focus-${width}.png`,fullPage:false});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  expect(database(`return p.inventoryItem.count({where:{ownerPlayerId:${JSON.stringify(f.user)}}});`)).toBe(0);
+  expect(database(`return p.inventoryItem.count({where:{currentOwnerId:${JSON.stringify(f.user)}}});`)).toBe(0);
+  expect(database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true,purgedAt:true}});`)).toEqual(originals);
   expect(errors).toEqual([]);
 });

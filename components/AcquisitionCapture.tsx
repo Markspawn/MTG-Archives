@@ -165,14 +165,24 @@ export function AcquisitionCapture({
       captureRoot.current?.style.setProperty("--scan-scroll-offset", `${height + (cardNavigator.current?.getBoundingClientRect().height ?? 0) + 24}px`);
     }
   }, []);
+  const keepReviewTargetClear = useCallback(() => {
+    measureScrollOffset();
+    const target = document.activeElement;
+    // A successful save can grow the sticky Inventory action, especially on a
+    // phone. Reposition only our focused card row; never move a user's editor.
+    if (target instanceof HTMLElement && target.id.startsWith("capture-card-") && captureRoot.current?.contains(target)) {
+      const bottom = cardNavigator.current?.getBoundingClientRect().bottom ?? progressPanel.current?.getBoundingClientRect().bottom ?? 0;
+      if (target.getBoundingClientRect().top < bottom + 8) target.scrollIntoView({block:"start"});
+    }
+  }, [measureScrollOffset]);
   useLayoutEffect(() => {
     const summary = progressPanel.current;
     if (!summary) return;
     measureScrollOffset();
-    const observer = new ResizeObserver(measureScrollOffset);
+    const observer = new ResizeObserver(keepReviewTargetClear);
     observer.observe(summary);
     return () => observer.disconnect();
-  }, [batchId, hasProgress, measureScrollOffset]);
+  }, [batchId, hasProgress, measureScrollOffset, keepReviewTargetClear]);
   function scrollScanTarget(target: HTMLElement | null) {
     // A state change can grow the summary before ResizeObserver's next turn.
     // Read its current layout immediately before a programmatic jump.
@@ -213,10 +223,10 @@ export function AcquisitionCapture({
     measureScrollOffset();
     const navigator = cardNavigator.current;
     if (!navigator) return;
-    const observer = new ResizeObserver(measureScrollOffset);
+    const observer = new ResizeObserver(keepReviewTargetClear);
     observer.observe(navigator);
     return () => observer.disconnect();
-  }, [reviewLayout, hasProgress, measureScrollOffset]);
+  }, [reviewLayout, hasProgress, measureScrollOffset, keepReviewTargetClear]);
   function chooseReviewLayout(layout: "focus" | "list") {
     setReviewLayout(layout);
     try { localStorage.setItem(`mtg-acquisition-review-layout:${userId}`, layout); } catch { /* Session remains usable. */ }
