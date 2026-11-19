@@ -89,6 +89,8 @@ for(const width of [1366,390,320])test(`bulk exclusions and one-confirmation Inv
   expect(database(`return p.acquisitionCommitMember.count({where:{runId:${JSON.stringify(other.runId)}}});`)).toBe(0);
   expect(database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true}});`)).toEqual(original);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await bulk.getByRole("button",{name:"Inspect card 3",exact:true}).click();
+  await expect(page.getByTestId("capture-card-3")).toBeVisible();
 });
 
 test("all confirmed covers six pages and 501 copies with one approval and replay safety",async({page,baseURL})=>{

@@ -1189,7 +1189,7 @@ export function AcquisitionCapture({
             blockedPhotos={blockedPhotos} draftsReady={cachedDrafts.ready} canUsePhotos={canUsePhotos}
             onOpenChange={setBulkOpen} onConfirmed={ids => { setSelectedPhotos(previous => [...new Set([...previous, ...ids])]);
               requestAnimationFrame(()=>scrollScanTarget(document.getElementById("scan-bulk-review"))); }}
-            onInspect={position => { setReviewFilter("all"); revealCard(position - 1); }} />
+            onInspect={position => { setInventoryOpen(false); setReviewFilter("all"); revealCard(position - 1); }} />
           <div id="scan-inventory" tabIndex={-1} className="scroll-mt-[var(--scan-scroll-offset,14rem)]" hidden={!inventoryOpen}>
             <button className={button + " mb-2"} onClick={() => { setInventoryOpen(false); requestAnimationFrame(() => scrollScanTarget(document.getElementById("scan-review"))); }}>Back to matches</button>
             <AcquisitionCommitControls key={`commit:${batchId}`} progress={progress} locations={locations}
