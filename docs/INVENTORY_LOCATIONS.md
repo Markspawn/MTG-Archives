@@ -16,7 +16,7 @@ The migration creates an `Unassigned` location for every owner that already has 
 
 The inventory page has two display modes:
 
-- **Exact printings** groups rows that share owner, local card printing, finish, condition, and language. Quantities are summed across locations and the row exposes a location breakdown.
+- **Exact printings** in your inventory groups matching copies by the catalog printing. The drawer lists each stock stack with its quantity, location, finish, condition, language, source, and notes. Filters limit which copies contribute to the total. Admin inventory retains its owner and copy-attribute grouping for cross-owner operations.
 - **Grouped by card name** groups exact-printing rows by Scryfall `oracleId` when available and falls back to normalized card name when it is missing. This is display-only and does not merge database records.
 
 ## Import and export behavior

@@ -121,6 +121,7 @@ type InventoryLocationStack = {
   condition?: string | null;
   language?: string | null;
   sourceType?: string | null;
+  notes?: string | null;
   locationKind?: "NORMAL" | "DECK" | null;
   locationActive?: boolean | null;
   locationSystemManaged?: boolean | null;
@@ -223,6 +224,7 @@ export type InventoryRow = {
   scryfallUri?: string;
   condition?: string;
   displayMode?: "exact" | "grouped";
+  rollupPrinting?: boolean;
   sourceItemIds?: string[];
   tradeWishlistTargets?: Array<{
     inventoryItemId: string;
@@ -406,6 +408,8 @@ function getRowSourceIds(row: InventoryRow) {
 
 function inventoryRowControlName(row: InventoryRow) {
   const printing = `${row.setCode.toUpperCase()} #${row.collectorNumber || "?"}`;
+  if (row.rollupPrinting)
+    return [row.cardName, printing, row.currentOwner].filter(Boolean).join(", ");
   const finish = row.foilStatus ||
     (row.displayMode === "exact" ? (row.foil ? "FOIL" : "NONFOIL") : null);
   return [
@@ -785,10 +789,12 @@ function InventoryDetailPanel({
             <div className="text-xs uppercase text-zinc-500">Price</div>
             {priceLabel}
           </div>
-          <div>
-            <div className="text-xs uppercase text-zinc-500">Condition</div>
-            {row.condition || "-"}
-          </div>
+          {!row.rollupPrinting ? (
+            <div>
+              <div className="text-xs uppercase text-zinc-500">Condition</div>
+              {row.condition || "-"}
+            </div>
+          ) : null}
           {capabilities.canViewVisibility ? (
             <div>
               <div className="text-xs uppercase text-zinc-500">Visibility</div>
@@ -801,7 +807,7 @@ function InventoryDetailPanel({
               {row.currentOwner}
             </div>
           ) : null}
-          {capabilities.canViewPrivateSourceInfo ? (
+          {capabilities.canViewPrivateSourceInfo && !row.rollupPrinting ? (
             <div>
               <div className="text-xs uppercase text-zinc-500">Source</div>
               {friendlySource(row.sourceType)}
@@ -816,12 +822,27 @@ function InventoryDetailPanel({
             <div className="space-y-1">
               {visibleLocationBreakdown.map((location, index) => (
                 <div
-                  key={`${location.locationId ?? location.name}-${index}`}
+                  key={location.inventoryItemId ?? `${location.locationId ?? location.name}-${index}`}
                   className="flex items-center justify-between rounded bg-zinc-900 px-2 py-1"
                 >
-                  <span>
+                  <span className="min-w-0">
                     {location.name}
                     {location.section ? ` / ${location.section}` : ""}
+                    {row.rollupPrinting ? (
+                      <span className="block text-xs text-zinc-400">
+                        {[
+                          location.foilStatus,
+                          location.condition,
+                          location.language,
+                          capabilities.canViewPrivateSourceInfo && location.sourceType
+                            ? friendlySource(location.sourceType as InventoryRow["sourceType"])
+                            : null,
+                        ].filter(Boolean).join(" · ")}
+                        {capabilities.canViewPrivateSourceInfo && location.notes ? (
+                          <span className="block whitespace-pre-wrap">{location.notes}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="font-semibold">{location.quantity}</span>
                 </div>
@@ -829,7 +850,7 @@ function InventoryDetailPanel({
             </div>
           </div>
         ) : null}
-        {capabilities.canViewPrivateSourceInfo && row.notes ? (
+        {capabilities.canViewPrivateSourceInfo && !row.rollupPrinting && row.notes ? (
           <div className="border-t border-zinc-800 pt-3">
             <div className="text-xs uppercase text-zinc-500">Notes</div>
             <div>{row.notes}</div>
@@ -840,9 +861,16 @@ function InventoryDetailPanel({
   );
 }
 
-function priceHistoryFinish(row: InventoryRow) {
-  if (row.foilStatus === "FOIL") return "foil";
-  if (row.foilStatus === "ETCHED") return "etched";
+function printingHasMixedFinishes(row: InventoryRow) {
+  return Boolean(
+    row.rollupPrinting &&
+      row.locationBreakdown?.some((stack) => stack.foilStatus !== row.foilStatus),
+  );
+}
+
+function priceHistoryFinish(foilStatus?: string) {
+  if (foilStatus === "FOIL") return "foil";
+  if (foilStatus === "ETCHED") return "etched";
   return "normal";
 }
 
@@ -867,12 +895,20 @@ function formatHistoryChange(
   return `${sign}${formatHistoryMoney(change.absolute, currency)}${percent}`;
 }
 
-function CardPriceHistoryPanel({ row }: { row: InventoryRow }) {
+function CardPriceHistoryPanel({
+  row,
+  foilStatus = row.foilStatus,
+  showFinish = false,
+}: {
+  row: InventoryRow;
+  foilStatus?: string;
+  showFinish?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState<CardPriceHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const finish = priceHistoryFinish(row);
+  const finish = priceHistoryFinish(foilStatus);
 
   useEffect(() => {
     if (!open || history) return;
@@ -931,7 +967,10 @@ function CardPriceHistoryPanel({ row }: { row: InventoryRow }) {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <span>Price history</span>
+        <span>
+          <span>Price history</span>
+          {showFinish ? ` · ${finish}` : null}
+        </span>
         <span className="text-zinc-500">{open ? "Hide" : "Show"}</span>
       </button>
       {open ? (
@@ -1219,13 +1258,13 @@ function CardDetail({
   );
   const hasLoyalty = Boolean(row.loyalty);
   const hasDefense = Boolean(row.defense);
-  const treatment = row.foilStatus || (row.foil ? "FOIL" : "NONFOIL");
-  const priceLabel =
-    row.preferredPriceLabel ||
-    row.priceUsd ||
-    row.priceUsdFoil ||
-    row.priceUsdEtched ||
-    "-";
+  const mixedFinishes = printingHasMixedFinishes(row);
+  const treatment = mixedFinishes
+    ? "Multiple finishes"
+    : row.foilStatus || (row.foil ? "FOIL" : "NONFOIL");
+  const priceLabel = mixedFinishes
+    ? "Varies by finish"
+    : row.preferredPriceLabel || row.priceUsd || row.priceUsdFoil || row.priceUsdEtched || "-";
   const legalityFormats = [
     ["Standard", legalities.standard],
     ["Pioneer", legalities.pioneer],
@@ -1468,7 +1507,15 @@ function CardDetail({
             priceLabel={priceLabel}
           />
           {capabilities.canViewPrivateSourceInfo ? (
-            <CardPriceHistoryPanel row={row} />
+            mixedFinishes ? (
+              Array.from(new Set(row.locationBreakdown?.map((stack) => stack.foilStatus))).map(
+                (finish) => (
+                  <CardPriceHistoryPanel key={finish} row={row} foilStatus={finish ?? undefined} showFinish />
+                ),
+              )
+            ) : (
+              <CardPriceHistoryPanel row={row} />
+            )
           ) : null}
         </aside>
         <div className="space-y-3 text-sm">
@@ -2401,8 +2448,18 @@ export function InventoryBrowser({
           <ColorIdentityIcons value={row.original.colorIdentity} />
         ),
       },
-      { accessorKey: "preferredPriceLabel", header: "Preferred Price" },
-      { accessorKey: "foilStatus", header: "Foil" },
+      {
+        accessorKey: "preferredPriceLabel",
+        header: "Preferred Price",
+        cell: ({ row }) =>
+          printingHasMixedFinishes(row.original) ? "Varies by finish" : row.original.preferredPriceLabel,
+      },
+      {
+        accessorKey: "foilStatus",
+        header: "Foil",
+        cell: ({ row }) =>
+          printingHasMixedFinishes(row.original) ? "Mixed" : row.original.foilStatus,
+      },
       ...(capabilities.canViewVisibility
         ? [
             {
@@ -2418,7 +2475,13 @@ export function InventoryBrowser({
             {
               accessorKey: "sourceType",
               header: "Source",
-              cell: ({ row }: any) => friendlySource(row.original.sourceType),
+              cell: ({ row }) =>
+                row.original.rollupPrinting &&
+                row.original.locationBreakdown?.some(
+                  (stack) => stack.sourceType !== row.original.sourceType,
+                )
+                  ? "Mixed"
+                  : friendlySource(row.original.sourceType),
             } satisfies ColumnDef<InventoryRow>,
           ]
         : []),
@@ -3363,9 +3426,9 @@ export function InventoryBrowser({
                     <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-2 py-0.5 rounded">
                       x{row.quantity}
                     </span>
-                    {row.foilStatus && row.foilStatus !== "NONFOIL" ? (
+                    {(printingHasMixedFinishes(row) || (row.foilStatus && row.foilStatus !== "NONFOIL")) ? (
                       <span className="absolute top-1 left-1 bg-amber-400 text-black text-[10px] px-1 rounded">
-                        {row.foilStatus}
+                        {printingHasMixedFinishes(row) ? "Mixed finishes" : row.foilStatus}
                       </span>
                     ) : null}
                   </div>
@@ -3690,6 +3753,7 @@ export function InventoryBrowser({
                         condition: editing.condition,
                         language: editing.language,
                         sourceType: editing.sourceType,
+                        notes: editing.notes,
                       },
                     ]
                 ).map((stack, index) => {
@@ -3916,7 +3980,7 @@ export function InventoryBrowser({
                             Notes
                             <textarea
                               name="notes"
-                              defaultValue={editing.notes || ""}
+                              defaultValue={stack.notes ?? ""}
                               className={cn(filterTextareaClass, "mt-1 w-full")}
                             />
                           </label>
@@ -4064,7 +4128,7 @@ export function InventoryBrowser({
                             Notes for split stack
                             <textarea
                               name="notes"
-                              defaultValue={editing.notes || ""}
+                              defaultValue={stack.notes ?? ""}
                               className={cn(filterTextareaClass, "mt-1 w-full")}
                             />
                           </label>

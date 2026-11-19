@@ -584,7 +584,7 @@ export async function verifyCountedScanner(db: PrismaClient) {
     assert.deepEqual(stock.sort((a,b)=>a.cardId.localeCompare(b.cardId)),[
       {cardId:chosen.id,language:"fr",foilStatus:"FOIL",condition:"LP",quantity:2},
       {cardId:alternate.id,language:"fr",foilStatus:"ETCHED",condition:"MP",quantity:1},
-      {cardId:card.id,language:"en",foilStatus:"NONFOIL",condition:"NM",quantity:1},
+      {cardId:card.id,language:"EN",foilStatus:"NONFOIL",condition:"NM",quantity:1},
     ].sort((a,b)=>a.cardId.localeCompare(b.cardId)));
     const members=await db.acquisitionCommitMember.findMany({where:{runId:savedRun.id}});
     assert.equal(members.length,4);

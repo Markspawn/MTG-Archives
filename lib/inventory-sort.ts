@@ -102,6 +102,7 @@ const FINISH_RANK: Record<string, number> = {
   NORMAL: 1,
   FOIL: 2,
   ETCHED: 3,
+  MIXED: 4,
 };
 
 const COLOR_RANK: Record<string, number> = { W: 1, U: 2, B: 3, R: 4, G: 5 };

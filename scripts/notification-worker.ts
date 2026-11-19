@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 import { processHourlyWishlistDigests } from "../lib/wishlist-notification-digests";
 import {
   builtInNotificationDeliveryHandlers,
@@ -28,8 +29,26 @@ const intervalMs = positiveInteger(
 );
 const runOnce = process.argv.includes("--once");
 let stopping = false;
+let nextLanguageCleanup = 0;
+const languageCleanupIntervalMs = 24 * 60 * 60 * 1000;
 
 async function tick() {
+  if (Date.now() >= nextLanguageCleanup) {
+    try {
+      const [result] = await prisma.$queryRaw<{ repaired: number }[]>`
+        SELECT normalize_inventory_english_rows() AS repaired
+      `;
+      nextLanguageCleanup = Date.now() + languageCleanupIntervalMs;
+      if (result?.repaired) {
+        console.info("[notification-worker] inventory languages normalized", result);
+      }
+    } catch (error) {
+      console.error(
+        "[notification-worker] inventory language normalization failed",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
   try {
     const result = await processDailyPricingDigests();
     if (result.created) {
