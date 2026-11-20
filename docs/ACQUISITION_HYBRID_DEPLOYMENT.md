@@ -11,6 +11,12 @@ neither visual nor printing workers. The repository previously published only
 web and OCR images; its hybrid overlays were local-only. This establishes a
 missing image-comparison deployment path, not an optical model failure.
 
+The inspected originals have readable names and copyright lines but no modern
+printed set/collector footer. Text lookup therefore finds multiple printings
+without evidence to distinguish them; the first text-only candidate is not a
+confident printing identification. Hard-coding Portal from the batch contents
+or treating a copyright year as exact identity would hide that uncertainty.
+
 A private, offline replay used the unchanged original bytes, current native
 source, the existing frozen DINOv2 index and all114,364 available reference faces
 (904 unavailable). Neither expected labels nor batch names selected candidates.
@@ -27,6 +33,17 @@ accuracy measurement, throughput guarantee or production rollout. Original
 digests, full native results, descriptor, index/model identities, source hashes
 and failed attempts remain in private `portal-recognition-20261119` evidence.
 Related to #307; its broader accuracy acceptance remains open.
+
+The canonical image also builds from committed source `b34ca835` as
+`sha256:e4f9ea0add708057f3e31affba96506f083b6e7b01c09b44e9b0c07825543267`.
+All 558 copied inputs match the Git export. Its bundled offline smoke and a
+second full-index replay pass without source replacement mounts: the same
+first identities and SIFT inliers, with times 18.030s/7.825s and automatic
+acceptance still false. Later documentation edits do not change these inputs.
+The six temporary containers and isolated builder are retired; the qualified
+image and original evidence remain. Required exact-head CI is recorded on
+[PR #1054](https://github.com/sefaction/MTG-Archives/pull/1054), separately from
+this local build/replay evidence.
 
 ## Deployment package
 
