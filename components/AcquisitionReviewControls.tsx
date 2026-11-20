@@ -999,6 +999,7 @@ export function AcquisitionPhotoReview({
           <div className={simple
             ? `${reviewStyles.comparison} ${focused ? reviewStyles.focused : reviewStyles.list}`
             : "grid grid-cols-2 gap-3 sm:gap-6 min-w-0"} data-testid="scan-comparison">
+            <div className={simple ? reviewStyles.pair : "contents"}>
             <AcquisitionScanImage
               src={`/api/acquisition/${batchId}/photos/${photoId}`}
               evidence={record.evidence}
@@ -1078,8 +1079,9 @@ export function AcquisitionPhotoReview({
                 </>
               )}
             </figure>
+            </div>
             {simple && (
-              <div className="min-w-0 col-span-2 lg:col-span-1 self-start">
+              <div className={`min-w-0 self-start ${reviewStyles.details}`}>
                 <p className="font-semibold break-words">
                   {selected?.name ?? "No proposed printing yet"}
                 </p>
