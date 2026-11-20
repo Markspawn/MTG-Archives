@@ -41,6 +41,7 @@ cp -p .env "$backup/.env"
 helper=ghcr.io/sefaction/mtg-archives-web:main
 docker image inspect "$helper" >/dev/null 2>&1 || docker pull "$helper"
 normalizer=$(cat <<'NODE'
+try {
 const fs=require('node:fs'),yaml=require('js-yaml'),dotenv=require('dotenv'),assert=require('node:assert/strict');
 const text=fs.readFileSync(0,'utf8');
 const refs={WEB_IMAGE:'ghcr.io/sefaction/mtg-archives-web:main',ACQUISITION_RECOGNITION_IMAGE:'ghcr.io/sefaction/mtg-archives-recognition:main',ACQUISITION_VISUAL_IMAGE:'ghcr.io/sefaction/mtg-archives-visual:main',IMAGE_TAG:'main'};
@@ -69,12 +70,19 @@ if(process.argv[1]==='env'){
   assert.deepEqual(unchanged(doc),unchanged(before),'Unrelated Compose settings changed');
   process.stdout.write(yaml.dump(doc,{lineWidth:-1,noRefs:true}));
 }
+} catch {
+  console.error('Configuration could not be safely normalized. Original files are unchanged; inspect the private backup locally.');
+  process.exitCode=1;
+}
 NODE
 )
 docker run --rm -i --pull never --network none --memory 192m --cpus 0.5 --pids-limit 32 --entrypoint node "$helper" -e "$normalizer" compose < compose.yaml > "$backup/compose.next.yaml"
 docker run --rm -i --pull never --network none --memory 192m --cpus 0.5 --pids-limit 32 --entrypoint node "$helper" -e "$normalizer" env < .env > "$backup/.env.next"
-docker compose --project-directory "$project" --env-file "$backup/.env.next" -p mtg-archives -f "$backup/compose.next.yaml" config --quiet
-docker compose --project-directory "$project" --env-file "$backup/.env.next" -p mtg-archives -f "$backup/compose.next.yaml" config --images > "$backup/images.next.txt"
+if ! docker compose --project-directory "$project" --env-file "$backup/.env.next" -p mtg-archives -f "$backup/compose.next.yaml" config --quiet > "$backup/validation.log" 2>&1; then
+  printf 'Compose validation failed; original files are unchanged. Private details: %s/validation.log\n' "$backup" >&2
+  exit 1
+fi
+docker compose --project-directory "$project" --env-file "$backup/.env.next" -p mtg-archives -f "$backup/compose.next.yaml" config --images > "$backup/images.next.txt" 2>> "$backup/validation.log"
 if grep -E '^ghcr\.io/sefaction/mtg-archives-(web|recognition|visual)(:|@)' "$backup/images.next.txt" | grep -vE ':main$'; then
   echo 'An application image is still pinned; configuration was not changed.' >&2
   exit 1

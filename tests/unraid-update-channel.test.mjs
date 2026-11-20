@@ -45,6 +45,11 @@ test('custom or missing application definitions fail before installed configurat
   for(const input of ['services: {}','services:\n  web:\n    image: example/custom:review'])
     assert.throws(()=>normalize('compose',input));
 });
+test('malformed private YAML cannot leak credentials through helper errors',()=>{
+  const secret='private-fixture-secret-do-not-print';
+  try{normalize('compose','services:\n  web:\n    environment: [PASSWORD='+secret+'\n');assert.fail('Malformed fixture should fail');}
+  catch(error){assert.doesNotMatch(String(error.stderr),new RegExp(secret));assert.match(String(error.stderr),/Original files are unchanged/);}
+});
 test('normal flat and opted-in hybrid resolve to moving images with fresh-pull policy; explicit rollback remains possible',()=>{
   const folder=mkdtempSync(path.join(tmpdir(),'mtg-update-channel-'));
   try{
