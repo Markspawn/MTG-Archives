@@ -4,9 +4,11 @@ import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
 import { runAcquisitionNativeProcess } from "../lib/acquisition-native-process";
 import { AcquisitionNativeStream } from "../lib/acquisition-native-stream";
+import { ACQUISITION_PREPARED_INPUT_MAX_BYTES } from "../lib/acquisition-image-input";
 import { runAcquisitionJobsOnce } from "../lib/acquisition-jobs";
 import {
   enqueueReadyVisual,
+  enqueueFailedIdentifierFallback,
   retrieveAcquisitionVisual,
 } from "../lib/acquisition-visual-worker";
 import { VISUAL_STAGE } from "../lib/acquisition-visual";
@@ -23,7 +25,7 @@ const descriptorSchema = z.object({
 const generation = new AcquisitionNativeGeneration(
   async () => descriptorSchema.parse(await runAcquisitionNativeProcess(
     "python", [program, "--describe"], Buffer.alloc(0), AbortSignal.timeout(30000), observeFailure)),
-  descriptor => new AcquisitionNativeStream("python", [program, "--stream", "--manifest", descriptor.manifest], undefined, observeFailure),
+  descriptor => new AcquisitionNativeStream("python", [program, "--stream", "--manifest", descriptor.manifest], ACQUISITION_PREPARED_INPUT_MAX_BYTES, observeFailure),
   (event, descriptor) => console.log(JSON.stringify({
     event: `visual-generation-${event}`, model: descriptor?.digest, references: descriptor?.referenceCount,
   })),
@@ -48,6 +50,7 @@ async function main() {
       await setTimeout(1000); continue;
     }
     const { descriptor, native } = generation.current;
+    await enqueueFailedIdentifierFallback(db, descriptor.digest);
     await enqueueReadyVisual(db, descriptor.digest);
     let inferenceRequests = 0, reuseHits = 0;
     const result = await runAcquisitionJobsOnce(

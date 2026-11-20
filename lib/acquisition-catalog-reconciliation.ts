@@ -41,6 +41,8 @@ import {
   combineAcquisitionCandidates,
   acquisitionVisualCandidates,
 } from "./acquisition-visual";
+import {preparedCardFromOutput,prepareRecognitionCard,samePreparedCard,applyPreparedInputPolicy} from './acquisition-prepared-card';
+import {applyEarlySetSymbol} from './acquisition-field-readings';
 
 const sourceSchema = z.object({
   photoId: z.string().uuid(),
@@ -363,6 +365,8 @@ export function createCatalogReconciliationHandler(
         .filter((id): id is string => Boolean(id)) : []);
     if(observed.native.scannerLayout?.readingStatus==="COMPLETE")proposals=combineScannerLayoutReadings(snapshot!.index,observed.native);
     if(reference)proposals=combineAcquisitionReferenceReadings(snapshot!.index,reference.native,observed.native);
+    proposals = applyEarlySetSymbol(proposals, observed.native.scannerLayout?.readingStatus==='COMPLETE'
+      ? observed.native.scannerLayout.orientations : observed.native.orientations);
     if (visual)
       proposals = combineAcquisitionCandidates(
         proposals,
@@ -403,9 +407,12 @@ export function createCatalogReconciliationHandler(
           proposal.reasons.push("STAMP_UNVERIFIED");
       }
     }
-    return proposals;
+    return applyPreparedInputPolicy(proposals, observed.native);
     };
     const proposals=resolve();
+    const preparedSource=preparedCardFromOutput(source.output,photo.digest);
+    const preparation=preparedSource&&samePreparedCard(preparedSource,prepareRecognitionCard(observed.native,proposals))
+      ? preparedSource : undefined;
     // Separate conditional interpretations never replace saved machine text or
     // its proposals. Only a later, locked explicit default can authorize one.
     const languageOptions=acquisitionBatchLanguageCandidates(snapshot!.index,observed.native.orientations)
@@ -426,6 +433,7 @@ export function createCatalogReconciliationHandler(
         ? { sourceVisualJobId: visualJob.id, visual: visual.visual }
         : {}),
       native: observed.native,
+      ...(preparation ? {preparation} : {}),
       versions: {
         ...observed.versions,
         catalog: snapshot!.digest,

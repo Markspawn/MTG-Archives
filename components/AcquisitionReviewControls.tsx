@@ -27,7 +27,7 @@ import {
 import {AcquisitionScannerLayoutControls} from "./AcquisitionScannerLayoutControls";
 import { AcquisitionCardRegionEditor } from "./AcquisitionCardRegionEditor";
 import type { AcquisitionManualRegion } from "@/lib/acquisition-manual-region";
-import { acquisitionReferenceBoundary } from "@/lib/acquisition-printing";
+import { acquisitionReferenceBoundary, finalImageComparisonMessage } from "@/lib/acquisition-printing";
 import {AcquisitionPrintingDetails} from "./AcquisitionPrintingDetails";
 import { finishForPrinting } from "@/lib/acquisition-finish";
 import type { AcquisitionReviewMode } from "@/lib/acquisition-review-display";
@@ -1091,6 +1091,9 @@ export function AcquisitionPhotoReview({
                     · {selected.lang?.toUpperCase() ?? "Language unknown"}
                   </p>
                 )}
+                <p className="text-xs h-8 line-clamp-2" data-testid="scan-final-image-check">{!record.review
+                  ? finalImageComparisonMessage(record.evidence?.printing,selected?.id,
+                    ['WAITING','PENDING','RUNNING'].includes(record.printingStatus ?? '')) : null}</p>
                 <p className={`${reviewStyles.hint} text-xs mt-1 min-h-4`} data-testid={!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "scan-name-only" : undefined}>{!record.review && reasons.includes("UNLOCALIZED_NAME_HINT") ? "Name only; check the exact printing." : null}</p>
                 <p
                   className="text-xs mt-1"
