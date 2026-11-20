@@ -1,4 +1,5 @@
 "use client";
+import type {CSSProperties} from "react";
 import reviewStyles from "./AcquisitionReview.module.css";
 import {AcquisitionLanguageSelect} from "./AcquisitionLanguageSelect";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -210,6 +211,12 @@ export function AcquisitionCapture({
   const [visibleCount, setVisibleCount] = useState(12);
   const [reviewMode, setReviewMode] = useState<AcquisitionReviewMode>("simple");
   const [reviewLayout, setReviewLayout] = useState<"focus" | "list">("focus");
+  const [reviewScale, setReviewScale] = useState(100);
+  function chooseReviewScale(value: number) {
+    if (!Number.isInteger(value) || value < 75 || value > 200 || value % 5 !== 0) return;
+    setReviewScale(value);
+    try { localStorage.setItem(`mtg-acquisition-review-scale:${userId}`, String(value)); } catch { /* Sizing still works for this session. */ }
+  }
   useLayoutEffect(() => {
     measureScrollOffset();
     const navigator = cardNavigator.current;
@@ -313,6 +320,8 @@ export function AcquisitionCapture({
       );
       setReviewMode(saved === "advanced" ? "advanced" : "simple");
       setReviewLayout(localStorage.getItem(`mtg-acquisition-review-layout:${userId}`) === "list" ? "list" : "focus");
+      const scale = Number(localStorage.getItem(`mtg-acquisition-review-scale:${userId}`));
+      setReviewScale(Number.isInteger(scale) && scale >= 75 && scale <= 200 && scale % 5 === 0 ? scale : 100);
     } catch {
       /* The review remains usable without browser storage. */
     }
@@ -767,7 +776,7 @@ export function AcquisitionCapture({
     (progress.availableSlots === null || progress.availableSlots > 0) &&
     uploads.length < pendingPhotoLimit;
   return (
-    <div ref={captureRoot} className="space-y-4 min-w-0">
+    <div ref={captureRoot} className="space-y-4 min-w-0" style={{"--scan-review-scale": reviewScale / 100} as CSSProperties}>
       {progress?.correctionLibrary && progress.correctionLibrary.pendingCount > 0 && (
         <div role="status" className={panel}>
           <p className="font-medium">Correction photos waiting to be preserved: {progress.correctionLibrary.pendingCount}</p>
@@ -977,6 +986,15 @@ export function AcquisitionCapture({
                 Review saved cards
               </a>
             )}
+            {reviewMode === "simple" && <div className="flex max-w-full items-center gap-2 ml-auto" role="group" aria-label="Review size">
+              <label htmlFor="scan-review-size" className="text-xs whitespace-nowrap">Card size</label>
+              <input id="scan-review-size" type="range" min={75} max={200} step={5}
+                value={reviewScale} aria-valuetext={`${reviewScale}%`} className="w-24 sm:w-32 min-w-0"
+                disabled={busyReviews.size > 0} onChange={event => chooseReviewScale(Number(event.target.value))} />
+              <output htmlFor="scan-review-size" className="text-xs tabular-nums w-9">{reviewScale}%</output>
+              <button type="button" className={button + " !px-2 !py-1 text-xs"} disabled={busyReviews.size > 0 || reviewScale === 100}
+                onClick={() => chooseReviewScale(100)} aria-label="Reset card size">Reset</button>
+            </div>}
             </div>
             {selection && (
               <p role="status" className="text-sm mt-2">

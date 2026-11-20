@@ -1,16 +1,38 @@
-/* Keep comparison size independent of the available desktop page width. */
-.comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-.media { aspect-ratio: 1000 / 1397; width: 100%; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 10%); border-radius: 4px; overflow: hidden; }
+/* Pair width follows the saved preference. Reflow details instead of shrinking
+   one image or overflowing when the chosen pair needs the available width. */
+.comparison {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  flex: 0 0 min(100%, calc(var(--scan-image-width) * 2 + 12px));
+  max-width: 100%;
+}
+.details { flex: 1 1 200px; min-width: min(100%, 200px); }
+.media {
+  aspect-ratio: 1000 / 1397;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 10%);
+  border-radius: 4px;
+  overflow: hidden;
+}
 .media canvas, .media img, .media > button { width: 100%; height: 100%; object-fit: contain; }
-.list .media { max-width: 190px; margin-inline: auto; }
-.focused { --scan-media-height: clamp(220px, calc(100dvh - 400px), 360px); }
+.list { --scan-image-width: calc(140px * var(--scan-review-scale, 1)); }
+.list .details { flex-basis: 140px; min-width: min(100%, 140px); }
+.list .hint { min-height: 32px; }
+.focused {
+  --scan-media-height: calc(clamp(220px, calc(100dvh - 400px), 360px) * var(--scan-review-scale, 1));
+  --scan-image-width: calc(var(--scan-media-height) * .71582);
+  min-height: calc(var(--scan-media-height) + 70px);
+}
 .actions > button { flex: 0 0 auto; width: min(100%, 160px); }
 .workspace { overflow-anchor: none; min-height: calc(100dvh - var(--scan-toolbar-offset, 110px) - 16px); }
-.review { min-height: calc(clamp(220px, calc(100dvh - 400px), 360px) + 100px); }
-@media (min-width: 1024px) {
-  .list { grid-template-columns: repeat(2, minmax(0, 140px)) minmax(140px, 1fr); }
-  .list .media { max-width: 140px; }
-  .list .hint { min-height: 32px; }
-  .focused { grid-template-columns: repeat(2, minmax(0, calc(var(--scan-media-height) * .71582))) minmax(200px, 1fr); gap: 20px; min-height: calc(var(--scan-media-height) + 70px); }
-  .focused .media { height: var(--scan-media-height); }
-}
+.review { min-height: calc(clamp(220px, calc(100dvh - 400px), 360px) * var(--scan-review-scale, 1) + 100px); }

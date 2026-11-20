@@ -1,4 +1,12 @@
-## Current work - desktop scan review audit - November 19, 2026
+## Current work - user-controlled scan review size - November 19, 2026
+
+Owner scan-review-scale-20261119 / attended-scan-review-scale-20261119; codex/scan-review-scale, PR1053 based on main1ad24a8c. Brian requested user-controlled sizing after the fixed size was too small. Simple review now provides75-200% Card size/Reset alongside batch actions, per-user browser persistence across batches/reloads and one setting for focused/list views. Both images scale together; details reflow below a large pair instead of shrinking one side/overflowing. Default100% and Advanced presentation retained. Prior PR1052 merge approval is consumed; no PR1053 merge, production or scanner authority.
+
+Compiled product eb244bc3 passes source-bound production build/types, changed-file lint and11 unique browser cases: three scale/storage/keyboard/draft/real-save/containment cases, five default desktop/overview stability cases and three draft/navigation/reload cases1366/390/320. Photo metadata/Inventory conserved. Two initial browser-server readiness failures and a Windows CLI regex launch failure are preserved; readiness-confirmed retry passes both untouched desktop cases. No product change was needed after the first build. Full behavior/evidence: docs/SCAN_REVIEW_SIZE.md and .local-data/scan-review-scale-20261119/{build-inputs,resources}.json plus browser*.log/artifacts*. Final exact-head CI remains the readiness gate; earlier source CI is not a substitute.
+
+New named isolated sample on13305 uses copied data/originals/synthetic suggestions;13295/13285 and regular local/production remain protected. Task-specific exact runtime claim held during final source proof/cleanup; release after owned browser/build children are terminal. Retain active review image/db/originals and logs; no broad pruning or issue creation. Root unrelated WIP and paused John-Mark work preserved. Next safe step: final CI, current preview handoff, exact-owner release and PR readiness; individual approval is required before merging this follow-up.
+
+## Historical record - desktop scan review audit - November 19, 2026
 
 Owner scan-review-density-20261119 / attended-scan-review-density-20261119; branch codex/scan-review-density, PR1052 based on main b538d6e0. Brian requested an audit/fix for oversized cards, missing desktop controls, unequal images and confirmation movement; desktop browser is the priority. He subsequently explicitly approved this individual follow-up with "go ahead and push to main". Merge via PR after exact-head checks, never direct main; no production/scanner authority. Root unrelated WIP and paused John-Mark work preserved.
 

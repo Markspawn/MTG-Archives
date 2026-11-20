@@ -4,13 +4,13 @@ import {resetDesktopReviewInventory} from "./scan-review-fixture";
 
 test.skip(process.env.MTG_SCAN_DESKTOP_TEST !== "1", "Owned disposable desktop scan-review fixture required");
 test.use({video:"off",actionTimeout:15000});
-test.beforeAll(()=>resetDesktopReviewInventory());
+test.beforeAll(()=>resetDesktopReviewInventory(process.env.MTG_SCAN_REVIEW_OWNER));
 test.afterEach(async({page})=>{await page.unrouteAll({behavior:"wait"});await page.close();});
 function database(body:string) {
   const id=process.env.MTG_INVENTORY_TEST_CONTAINER??"";
   if(!/^[a-f0-9]{64}$/.test(id))throw Error("Immutable owned review app required");
   const owner=execFileSync("docker",["inspect","--format","{{index .Config.Labels \"mtg.archive.owner\"}}",id],{encoding:"utf8",windowsHide:true}).trim();
-  if(owner!=="scan-review-density-20261119")throw Error("Not the disposable desktop review");
+  if(owner!==(process.env.MTG_SCAN_REVIEW_OWNER ?? "scan-review-density-20261119"))throw Error("Not the disposable desktop review");
   return JSON.parse(execFileSync("docker",["exec","-i",id,"node"],{encoding:"utf8",windowsHide:true,timeout:30000,
     input:`const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();(async()=>{if(new URL(process.env.DATABASE_URL).pathname!=='/review_pending_performance')throw Error('Wrong fixture');${body}})().then(x=>console.log(JSON.stringify(x))).catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>p.$disconnect());`}));
 }
@@ -26,7 +26,7 @@ async function stableViewport(page:Page,action:()=>Promise<unknown>) {
 }
 for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:1920,height:1080},{width:1024,height:768}]) {
  test(`desktop comparison, controls and stable confirmation at ${viewport.width}x${viewport.height}`,async({page,baseURL},testInfo)=>{
-  test.setTimeout(180000);expect(baseURL).toBe("http://127.0.0.1:13295");
+  test.setTimeout(180000);expect(["http://127.0.0.1:13295","http://127.0.0.1:13305"]).toContain(baseURL);
   const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
   database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:require('@prisma/client').Prisma.DbNull,revision:{increment:1}}});`);
   const originals=database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true,purgedAt:true}});`);
@@ -94,7 +94,7 @@ for(const viewport of [{width:1366,height:768},{width:1280,height:720},{width:19
 }
 
 test("pending two-column reviews keep Confirm and Correct visible on a laptop",async({page,baseURL},testInfo)=>{
-  test.setTimeout(90000);expect(baseURL).toBe("http://127.0.0.1:13295");
+  test.setTimeout(90000);expect(["http://127.0.0.1:13295","http://127.0.0.1:13305"]).toContain(baseURL);
   const f=database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
   database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:require('@prisma/client').Prisma.DbNull,revision:{increment:1}}});`);
   await page.setViewportSize({width:1280,height:720});

@@ -4,7 +4,7 @@ import {resetDesktopReviewInventory} from "./scan-review-fixture";
 
 test.skip(process.env.MTG_SCANS_EXPERIENCE_TEST !== "1", "Owned disposable scan-review fixture required");
 test.use({video: "off", actionTimeout: 15000});
-test.beforeAll(({baseURL})=>{if(baseURL==="http://127.0.0.1:13295")resetDesktopReviewInventory();});
+test.beforeAll(({baseURL})=>{if(["http://127.0.0.1:13295","http://127.0.0.1:13305"].includes(baseURL??""))resetDesktopReviewInventory(process.env.MTG_SCAN_REVIEW_OWNER);});
 function database(body: string) {
   const container = process.env.MTG_INVENTORY_TEST_CONTAINER ?? "";
   if (!/^[a-f0-9]{64}$/.test(container)) throw Error("Immutable owned review container required");
@@ -15,7 +15,7 @@ function database(body: string) {
 }
 for (const width of [1366, 390, 320]) test(`focused comparison and two-column overview at ${width}px`, async ({page, baseURL}) => {
   test.setTimeout(180000);
-  expect(["http://127.0.0.1:13275","http://127.0.0.1:13285","http://127.0.0.1:13295"]).toContain(baseURL);
+  expect(["http://127.0.0.1:13275","http://127.0.0.1:13285","http://127.0.0.1:13295","http://127.0.0.1:13305"]).toContain(baseURL);
   const f = database("return JSON.parse(require('fs').readFileSync('/tmp/scans-experience-fixture.json','utf8'));");
   const originals=database(`return p.acquisitionPhoto.findMany({where:{runId:${JSON.stringify(f.runId)}},orderBy:{id:'asc'},select:{id:true,digest:true,bytes:true,purgedAt:true}});`);
   database(`return p.acquisitionCandidate.updateMany({where:{runId:${JSON.stringify(f.runId)}},data:{review:null,revision:{increment:1}}});`);
