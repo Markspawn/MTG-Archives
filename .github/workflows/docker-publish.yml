@@ -47,6 +47,9 @@ jobs:
           - component: recognition
             image: sefaction/mtg-archives-recognition
             dockerfile: ./tools/acquisition-runtime/Dockerfile
+          - component: visual
+            image: sefaction/mtg-archives-visual
+            dockerfile: ./tools/acquisition-runtime/Dockerfile.visual
     permissions:
       contents: read
       packages: write
@@ -130,6 +133,14 @@ jobs:
           docker run --rm --memory 256m -v "$model_volume:/models" --entrypoint python "$tag" /app/tools/acquisition-runtime/download_models.py
           docker run --rm --network none -v "$model_volume:/models:ro" --entrypoint python "$tag" /app/tools/acquisition-runtime/download_models.py --verify-only
           docker run --rm --network none --user 65534:65534 --memory 2g --cpus 1 -v "$model_volume:/models:ro" --entrypoint python "$tag" /app/tools/acquisition-runtime/smoke.py
+
+      - name: Verify offline visual and printing runtime imports and symbol assets
+        if: steps.head.outputs.current == 'true' && matrix.component == 'visual'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          tag="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          docker run --rm --network none --user 65534:65534 --memory 1g --cpus 1 --entrypoint python "$tag" -c 'import sys; sys.path[:0] = ["/app/tools/acquisition-runtime", "/eval"]; import torch, torchvision, visual, printing_worker; from expansion_symbols import verified_assets, symbol_asset_root; verified_assets(symbol_asset_root()); assert not torch.cuda.is_available(); print("Offline CPU visual/printing imports and symbol assets verified")'
 
       - name: Recheck branch head immediately before publication
         if: steps.head.outputs.current == 'true'
