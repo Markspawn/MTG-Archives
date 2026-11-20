@@ -6,6 +6,9 @@ services:
   acquisition-worker:
     environment:
       ACQUISITION_PRINTING_ENABLED: "1"
+  acquisition-catalog-worker:
+    environment:
+      ACQUISITION_PRINTING_ENABLED: "1"
   acquisition-printing-worker:
     image: mtg-acquisition-visual:local
     pull_policy: never

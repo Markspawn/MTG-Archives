@@ -42,6 +42,12 @@ The CPU recognition runtime is published alongside it as
 publications before deploying acquisition changes. Models and their verified
 metadata are initialized into persistent appdata; weights are not in the image.
 
+Image retrieval and printing evidence use the separately published CPU image
+`ghcr.io/sefaction/mtg-archives-visual`. The flat Unraid stack remains OCR-only by
+default. Its [optional hybrid deployment package](ACQUISITION_HYBRID_DEPLOYMENT.md)
+adds the visual/printing workers with verified persistent assets and review-only
+policy; publishing the image does not activate it on an installation.
+
 The `main` branch publishes:
 
 ```text
