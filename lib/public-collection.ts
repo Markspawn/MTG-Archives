@@ -287,7 +287,7 @@ export function buildPublicInventoryWhere(filters: PublicInventoryFilters) {
     and.push({
       OR: structured.sets.flatMap((set) => [
         { card: { setCode: { equals: set, mode: "insensitive" } } },
-        { card: { setName: { contains: set, mode: "insensitive" } } },
+        { card: { setName: { equals: set, mode: "insensitive" } } },
       ]),
     });
   }
