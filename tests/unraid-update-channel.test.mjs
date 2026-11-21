@@ -55,7 +55,8 @@ test('normal flat and opted-in hybrid resolve to moving images with fresh-pull p
   try{
     const base=readFileSync('docker-compose.unraid.flat.env.example','utf8');
     const assets='\nACQUISITION_MODELS_PATH=/fixture/models\nACQUISITION_VISUAL_INDEX_PATH=/fixture/index\nACQUISITION_VISUAL_MODELS_PATH=/fixture/visual-models\nACQUISITION_VISUAL_REFERENCES_PATH=/fixture/references\n';
-    const envfile=path.join(folder,'fixture.env');writeFileSync(envfile,base+assets);
+    const example=readFileSync('docker-compose.unraid.hybrid.env.example','utf8');
+    const envfile=path.join(folder,'fixture.env');writeFileSync(envfile,base+'\n'+example+assets);
     // Remove inherited operator overrides; exercise the shipped channel itself.
     const env={...process.env,COMPOSE_PROFILES:''};
     for(const key of ['WEB_IMAGE','IMAGE_TAG','ACQUISITION_RECOGNITION_IMAGE','ACQUISITION_VISUAL_IMAGE'])delete env[key];
@@ -64,6 +65,8 @@ test('normal flat and opted-in hybrid resolve to moving images with fresh-pull p
     for(const name of ['web','acquisition-worker','acquisition-catalog-worker','acquisition-model-init','acquisition-recognition-worker','acquisition-visual-worker','acquisition-printing-worker']){
       const svc=config.services[name];assert(svc);assert.match(svc.image,/:main$/);assert.equal(svc.pull_policy,'always');
     }
+    const fallback=JSON.parse(execFileSync('docker',args,{env:{...env,ACQUISITION_VISUAL_IMAGE:''},encoding:'utf8'}));
+    assert.equal(fallback.services['acquisition-visual-worker'].image,visual);
     const override={...env,WEB_IMAGE:'fixture-web:rollback',ACQUISITION_RECOGNITION_IMAGE:'fixture-ocr:rollback',ACQUISITION_VISUAL_IMAGE:'fixture-visual:rollback'};
     const rollback=JSON.parse(execFileSync('docker',args,{env:override,encoding:'utf8'}));
     assert.equal(rollback.services.web.image,'fixture-web:rollback');assert.equal(rollback.services['acquisition-recognition-worker'].image,'fixture-ocr:rollback');
