@@ -189,7 +189,8 @@ export async function heartbeatAcquisitionJob(
 ) {
   z.number().int().min(1000).max(300000).parse(leaseMs);
   const changed = await db.acquisitionProcessingJob.updateMany({
-    where: { ...lease(job, now), run: active },
+    where: { ...lease(job, now), run: active,
+      ...(job.stage === "photo-canonical-v1" ? {} : {candidate: {ignored: false}}) },
     data: { leaseExpiresAt: new Date(now.getTime() + leaseMs) },
   });
   return changed.count === 1;
@@ -207,6 +208,7 @@ export async function completeAcquisitionJob(
   const current = {
     revision: job.candidateRevision,
     excluded: false,
+    ignored: false,
     ...acquisitionAnalysisCandidateFence(job.input),
   };
   return db.$transaction(async (tx) => {

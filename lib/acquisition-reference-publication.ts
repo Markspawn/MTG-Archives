@@ -47,7 +47,7 @@ export async function publishAcquisitionReferenceDescendant(tx:Prisma.Transactio
         AND j."leaseExpiresAt">clock_timestamp() AND j.input=${JSON.stringify(job.input)}::jsonb
         AND j.stage=${job.stage} AND j."runId"=r.id AND j."artifactId"=${job.artifactId}
         AND j."candidateId"=c.id AND j."candidateRevision"=c.revision AND c.revision=${job.candidateRevision}
-        AND NOT c.excluded AND c.review IS NULL AND c."manualAnalysis" IS NULL
+        AND NOT c.excluded AND NOT c.ignored AND c.review IS NULL AND c."manualAnalysis" IS NULL
         AND s.phase NOT IN ('DRAFT','CANCELLED') AND s."cancelledAt" IS NULL AND s."trashedAt" IS NULL AND s."deletedAt" IS NULL
         AND p.active AND u."isActive" AND NOT u."forcePasswordChange"
         AND photo.ready AND photo."purgedAt" IS NULL AND photo.digest=${root.input.digest}

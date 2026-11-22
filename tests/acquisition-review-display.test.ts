@@ -27,6 +27,7 @@ test("review totals distinguish incomplete/pending choices from Inventory-ready 
   ].map(slot => ({ ...slot, physicalReadiness: { reasons: [] as string[] } }));
   assert.deepEqual(acquisitionReviewCounts(slots), {
     all: 7,
+    scanned: 7, ignored: 0,
     awaiting: 5,
     ready: 1,
     added: 1,
@@ -38,7 +39,7 @@ test("review totals distinguish incomplete/pending choices from Inventory-ready 
   }));
   assert.equal(acquisitionReviewCounts(batch).ready, 334);
   assert.deepEqual(acquisitionReviewCounts(slots, slot => Boolean(slot.review?.cardId)), {
-    all: 7, awaiting: 6, ready: 0, added: 1,
+    all: 7, scanned: 7, ignored: 0, awaiting: 6, ready: 0, added: 1,
   });
   assert.equal(
     batch.filter((s) => acquisitionSlotReviewState(s) === "ready").slice(0, 12)
@@ -72,7 +73,7 @@ test("accepted reviews remain pending for physical blockers and become ready aft
     assert.equal(acquisitionSlotReviewState(slot), "awaiting");
     assert.match(acquisitionSlotBlockedReason(slot), /^Review saved\./);
     assert.doesNotMatch(acquisitionSlotBlockedReason(slot), /Complete the printing/);
-    assert.deepEqual(acquisitionReviewCounts([slot]), { all: 1, awaiting: 1, ready: 0, added: 0 });
+    assert.deepEqual(acquisitionReviewCounts([slot]), { all: 1, scanned: 1, ignored: 0, awaiting: 1, ready: 0, added: 0 });
     const reloaded = JSON.parse(JSON.stringify(slot));
     assert.equal(acquisitionSlotReviewState(reloaded), "awaiting");
     reloaded.physicalReadiness.reasons = [];

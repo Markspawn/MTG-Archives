@@ -182,7 +182,7 @@ export async function claimScannerRun(db: PrismaClient, authorization: string | 
       locationId: progress.session.placement.locationId, ownerPlayerId: progress.session.placement.ownerPlayerId,
       section: progress.session.placement.section, excludeSessionId: progress.session.id,
     });
-    const pendingOwn = await tx.acquisitionCandidate.count({ where: { runId: run.acquisitionRunId, receipt: null } });
+    const pendingOwn = await tx.acquisitionCandidate.count({ where: { runId: run.acquisitionRunId, receipt: null, ignored: false } });
     if (current.counted && (current.physicalTarget === null || capacity.remaining !== null &&
         current.physicalTarget + pendingOwn > capacity.remaining))
       throw new ScannerRunConflict("Reserved capacity changed; no feed authorized. End this batch and choose available space.");
@@ -363,7 +363,7 @@ export async function finishScannerRun(db: PrismaClient, authorization: string |
         if (ready && state.destinationCurrent) {
           const space = await readScannerCapacity(tx, {locationId: row.locationId!, ownerPlayerId: row.ownerPlayerId,
             section: row.section, excludeSessionId: row.id});
-          const pending = await tx.acquisitionCandidate.count({where: {runId: run.acquisitionRunId, receipt: null}});
+          const pending = await tx.acquisitionCandidate.count({where: {runId: run.acquisitionRunId, receipt: null, ignored: false}});
           if (space.remaining === null || pending + nextTarget <= space.remaining) {
             const nextId = scannerContinuationRunId(run.id, offset);
             const marker = await readScannerStartMarker(nextId), retired = await scannerStartRetired(nextId);
@@ -581,7 +581,7 @@ export async function refillScannerBatch(db: PrismaClient, userId: string, value
     if (remaining <= 0) throw denied();
     const space = await readScannerCapacity(tx, { locationId: state.session.placement.locationId,
       ownerPlayerId: state.session.placement.ownerPlayerId, section: state.session.placement.section, excludeSessionId: state.session.id });
-    const pending = await tx.acquisitionCandidate.count({ where: { runId: prior.acquisitionRunId, receipt: null } });
+    const pending = await tx.acquisitionCandidate.count({ where: { runId: prior.acquisitionRunId, receipt: null, ignored: false } });
     if (space.remaining !== null && remaining + pending > space.remaining)
       throw new ScannerRunConflict("Reserved capacity changed. End this batch and select available space before feeding again.");
     const next = await tx.scannerRun.create({ data: { id: input.requestKey, agentId: prior.agentId,

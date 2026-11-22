@@ -76,7 +76,7 @@ export function AcquisitionCommitControls({
     void prepare(selected,previewRequest.all);
   });
   const reviewed = progress.slots.flatMap((s) =>
-    !s.committed && s.review && s.photos[0]?.ready ? [s.photos[0].id] : [],
+    !s.committed && !s.ignored && s.review && s.photos[0]?.ready ? [s.photos[0].id] : [],
   );
   const ready = progress.slots.flatMap(slot => acquisitionSlotReviewState(slot) === "ready"
     ? slot.photos.filter(photo => photo.ready && !photo.purgedAt && photo.generation === slot.generation).map(photo => photo.id) : []);

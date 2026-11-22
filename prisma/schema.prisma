@@ -1474,6 +1474,7 @@ model AcquisitionCandidate {
   uncertainty      String[]
   revision         Int
   excluded         Boolean @default(false)
+  ignored          Boolean @default(false)
   countConfirmed   Boolean @default(false)
   proposal         Json?
   review           Json?

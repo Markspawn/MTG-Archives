@@ -7,6 +7,8 @@ import { SCANNER_CAPTURE_PROVIDER, scannerCanonical } from "./scanner-run-protoc
 import { acquisitionImageInputKindSchema, type AcquisitionImageInputKind } from "./acquisition-image-input";
 import {acquisitionConflictBackoff} from "./acquisition-upload";
 import { allocatedAcquisitionCandidates } from "./acquisition-allocation-store";
+import {acquisitionIgnoreTransition} from "./acquisition-ignore";
+import {lockInventoryDestinations} from "./inventory-capacity";
 import { ACQUISITION_REVIEW_PAGE, acquisitionReviewPage } from "./acquisition-continuation";
 import { isAdminUser } from "./auth-policy";
 import { requireVisibleAcquisitionBatch, requireProcessingAcquisitionBatch } from "./acquisition-batch-policy";
@@ -242,6 +244,7 @@ function hydrate(row: Stored): StoredCapture {
       uncertainty: c.uncertainty as ("BOUNDARY_CONFLICT" | "MULTIFEED")[],
       revision: c.revision,
       excluded: c.excluded,
+      ignored: c.ignored,
       countConfirmed: c.countConfirmed,
       proposal: c.proposal as ReviewAttributes | null,
       review: c.review as (ReviewAttributes & { actorId: string }) | null,
@@ -388,7 +391,7 @@ export async function createAcquisitionSession(
             select: {
               _count: {
                 select: {
-                  candidates: { where: { excluded: false, receipt: null } },
+                  candidates: { where: { excluded: false, ignored: false, receipt: null } },
                 },
               },
             },
@@ -527,6 +530,7 @@ async function save(
       uncertainty: candidate.uncertainty,
       revision: candidate.revision,
       excluded: candidate.excluded,
+      ignored: candidate.ignored ?? false,
       countConfirmed: candidate.countConfirmed,
       proposal: json(candidate.proposal),
       review: json(candidate.review),
@@ -899,7 +903,7 @@ export async function getAcquisitionProgress(
     const row = await read(tx, actor, sessionId, {slotIds: slots.map(slot => slot.id)});
     const jobs = await tx.acquisitionProcessingJob.groupBy({
       by: ["status"],
-      where: { runId: row.run!.id },
+      where: { runId: row.run!.id, candidate: {ignored: false} },
       _count: { _all: true },
     });
     const currentPhotoIds = slots.flatMap((slot) => {
@@ -995,7 +999,7 @@ export async function getAcquisitionProgress(
     const allocated = await allocatedAcquisitionCandidates(tx, row.run!.id, row.target, slots.map(slot => slot.id));
     const physicalReasons = new Map(state.session.candidates.map(candidate => {
       const reasons: string[] = [];
-      if (candidate.excluded) reasons.push("UNAVAILABLE");
+      if (candidate.excluded || candidate.ignored) reasons.push("UNAVAILABLE");
       else {
         if (countReasons(candidate).length) reasons.push("COUNT_UNCERTAIN");
         if (!allocated.has(candidate.input.id)) reasons.push("OVERFLOW");
@@ -1021,6 +1025,7 @@ export async function getAcquisitionProgress(
         generation: slot.generation,
         photos: slot.photos,
         review,
+        ignored: row.run!.candidates.find(c => c.physicalId === slot.id)?.ignored ?? false,
         reviewProblems: acquisitionReviewProblems({committed, review,
           printings: reviewedNames,
           visualEnabled: process.env.ACQUISITION_VISUAL_ENABLED === "1",
@@ -1142,6 +1147,8 @@ export async function beginAcquisitionPhoto(
       }))
     )
       throw new Error("Retry the unfinished upload before retaking");
+    if (run.candidates.find((c) => c.physicalId === slot.id)?.ignored)
+      throw new Error("Capture card is ignored; restore it before retaking");
     if (run.candidates.find((c) => c.physicalId === slot.id)?.receipt)
       throw new Error(
         "Capture card is already committed; use Inventory to change it",
@@ -1292,7 +1299,7 @@ export async function getAcquisitionPhoto(
   });
 }
 
-async function reviewPhoto(tx: Tx, row: Stored, photoId: string) {
+async function reviewPhoto(tx: Tx, row: Stored, photoId: string, allowIgnored = false) {
   requireVisibleAcquisitionBatch(row);
   z.string().uuid().parse(photoId);
   const photo = await tx.acquisitionPhoto.findUnique({
@@ -1310,7 +1317,7 @@ async function reviewPhoto(tx: Tx, row: Stored, photoId: string) {
   const candidate = row.run!.candidates.find(
     (c) => c.physicalId === photo.slotId,
   );
-  if (!candidate || candidate.excluded)
+  if (!candidate || candidate.excluded || candidate.ignored && !allowIgnored)
     throw new Error("Capture card unavailable");
   return { photo, candidate };
 }
@@ -1328,7 +1335,7 @@ export async function getAcquisitionCardReview(
       where: { id: photoId }, select: { slotId: true },
     });
     const row = await read(tx, actor, sessionId, { photoId, slotId: scopePhoto?.slotId });
-    const { photo, candidate } = await reviewPhoto(tx, row, photoId);
+    const { photo, candidate } = await reviewPhoto(tx, row, photoId, true);
     const analysis = acquisitionManualAnalysisSchema.safeParse(candidate.manualAnalysis);
     const currentAnalysis = analysis.success && analysis.data.photoId === photo.id &&
       analysis.data.digest === photo.digest && analysis.data.generation === photo.generation
@@ -1385,6 +1392,7 @@ export async function getAcquisitionCardReview(
         }), evidence.status),
       revision: candidate.revision,
       manualRegion: currentAnalysis?.region ?? null,
+      ignored: candidate.ignored,
       ...(currentAnalysis ? {manualRegionRequestedRevision: currentAnalysis.candidateRevision} : {}),
       position: photo.slot.position,
       defaults: acquisitionDefaultsSchema.parse(
@@ -1468,6 +1476,37 @@ export async function saveAcquisitionReview(
         defaults,
         defaultsRevision: row.defaultsRevision + 1,
       };
+    }
+    if (input.action === "ignore" || input.action === "restore") {
+      const requestKey = `ignored-scan:${input.requestKey}`;
+      const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+      const prior = await tx.acquisitionCommand.findUnique({where: {runId_requestKey: {runId: row.run!.id, requestKey}}});
+      if (prior) {
+        const saved = JSON.parse(prior.payload);
+        if (saved.actorId !== actor.userId || saved.fingerprint !== fingerprint)
+          throw new Error("Capture ignore request changed; retry its original action");
+        return {replay: true, revision: saved.revision};
+      }
+      const {photo, candidate} = await reviewPhoto(tx, row, input.photoId, true);
+      const change = acquisitionIgnoreTransition(candidate, input.action, input.revision);
+      // Capacity readers and stock writers share this location lock. Ignoring
+      // releases a pending hold, never a physical capture position or feed slot.
+      if (row.locationId) await lockInventoryDestinations(tx, [row.locationId]);
+      const previous = acquisitionAnalysisForPhoto(candidate, photo);
+      await tx.acquisitionCandidate.update({where: {id: candidate.id}, data: {
+        ...change,
+        ...(!change.ignored && candidate.review === null ? {manualAnalysis: {
+          version: 1, requestKey: input.requestKey, photoId: photo.id, digest: photo.digest,
+          generation: photo.generation, candidateRevision: change.revision, region: previous?.region ?? null,
+        }} : {}),
+      }});
+      await tx.acquisitionSession.update({where: {id: sessionId}, data: {revision: {increment: 1}}});
+      await tx.acquisitionCommand.create({data: {runId: row.run!.id, requestKey,
+        payload: JSON.stringify({version: 1, action: input.action, actorId: actor.userId, fingerprint,
+          photoId: photo.id, candidateId: candidate.id, before: candidate.ignored,
+          ignored: change.ignored, revision: change.revision}),
+      }});
+      return {replay: false, revision: change.revision};
     }
     if(input.action==='scanner-layout'){
       const requestKey='scanner-layout:'+input.requestKey;

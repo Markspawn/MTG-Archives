@@ -183,7 +183,7 @@ export async function verifyAcquisitionCommit(
     const savedReview = physicalProgress.slots[0].review;
     assert.ok(physicalProgress.slots[0].physicalReadiness.reasons.includes("COUNT_UNCERTAIN"));
     assert.ok(physicalProgress.slots[1].physicalReadiness.reasons.includes("OVERFLOW"));
-    assert.deepEqual(acquisitionReviewCounts(physicalProgress.slots), { all: 2, awaiting: 2, ready: 0, added: 0 });
+    assert.deepEqual(acquisitionReviewCounts(physicalProgress.slots), { all: 2, scanned: 2, ignored: 0, awaiting: 2, ready: 0, added: 0 });
     const physicalSelection = { locationId: physicalDestination, section: "A", photoIds: [physical.photos[0].id] };
     await assert.rejects(previewAcquisitionCommit(db, actor, physical.id, physicalSelection), /confirmed physical count/);
     await assert.rejects(previewAcquisitionCommit(db, actor, physical.id, { ...physicalSelection, photoIds: [physical.photos[1].id] }), /confirmed physical count/);

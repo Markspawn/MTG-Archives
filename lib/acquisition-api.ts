@@ -76,6 +76,7 @@ export function acquisitionProgressDto(
     reviewed: state.session.candidates.filter(
       (c) =>
         !c.excluded &&
+        !c.ignored &&
         c.review?.cardId &&
         c.review.finish !== "UNKNOWN" &&
         c.review.condition &&

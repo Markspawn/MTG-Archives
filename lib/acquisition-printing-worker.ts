@@ -141,7 +141,7 @@ export async function observeAcquisitionPrinting(
   if (!photo.ready || photo.purgedAt || photo.runId !== job.runId || photo.digest !== input.digest ||
       photo.slotId !== candidate.physicalId || photo.generation !== photo.slot.generation ||
       observed.photoId !== photo.id || observed.native.photoDigest !== photo.digest ||
-      candidate.revision !== job.candidateRevision || candidate.excluded)
+      candidate.revision !== job.candidateRevision || candidate.excluded || candidate.ignored)
     throw new Error("Printing photo input changed");
   const cards = await db.card.findMany({where: {id: {in: observed.proposals.proposals.map(p=>p.card.id)}},
     select: {id: true, scryfallId: true, name: true, setCode: true, collectorNumber: true, lang: true, digital: true}});
