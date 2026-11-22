@@ -53,6 +53,7 @@ test("Ignore, Undo and Restore preserve saved choices and scans across desktop/p
   await expect(page.getByTestId('scan-review-summary')).toContainText('2 ignored');
   await page.getByRole('combobox',{name:'Show cards',exact:true}).selectOption('ignored');await expect(first).toBeVisible();
   await expect(first.getByRole('img',{name:'Ignored scan 1',exact:true})).toBeVisible();
+  await expect.poll(()=>first.getByRole('img',{name:'Ignored scan 1',exact:true}).evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0);
   await expect(page.getByRole('combobox',{name:'Jump to card',exact:true})).toContainText('Card 1 · Ignored');
   await first.scrollIntoViewIfNeeded();
   await page.screenshot({path:testInfo.outputPath('ignored-desktop.png')});

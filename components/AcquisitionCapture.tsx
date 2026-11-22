@@ -1437,7 +1437,10 @@ export function AcquisitionCapture({
                       )}
                       {slot.ignored ? <div className="flex flex-wrap items-start gap-3 text-sm">
                         {photo && !photo.purgedAt && <img src={`/api/acquisition/${batchId}/photos/${photo.id}?preview=1`}
-                          alt={`Ignored scan ${slot.position + 1}`} loading="lazy" className="w-32 max-w-full object-contain" />}
+                          alt={`Ignored scan ${slot.position + 1}`} loading="lazy" className="w-32 max-w-full object-contain"
+                          onError={event => { const image = event.currentTarget;
+                            if (image.src.endsWith("?preview=1")) image.src = `/api/acquisition/${batchId}/photos/${photo.id}`;
+                          }} />}
                         <p>Ignored · Scan and saved review kept. Restore to continue reviewing or add this card to Inventory.</p>
                       </div> : null}
                       {photo && !photo.purgedAt ? (
@@ -1515,7 +1518,7 @@ export function AcquisitionCapture({
                         {cachedDrafts.ready && !photo.purgedAt && !hasDraft(slot) && acquisitionSlotReviewState(slot) !== "ready" && <p className="text-sm">{acquisitionSlotBlockedReason(slot)}</p>}
                         </div>
                       )}
-                      {progress.providerId !== SCANNER_CAPTURE_PROVIDER && <button
+                      {progress.providerId !== SCANNER_CAPTURE_PROVIDER && !slot.ignored && <button
                         className={
                           button +
                           (reviewMode === "advanced" ? " w-full" : " text-xs")
