@@ -39,6 +39,7 @@ test("Ignore, Undo and Restore preserve saved choices and scans across desktop/p
   const snapshot=()=>database<any>(`const tables=['InventoryItem','Card','AcquisitionPhoto','AcquisitionCaptureSlot','AcquisitionObservation','AcquisitionArtifact'];const result={};for(const table of tables){const q='SELECT count(*)::text AS count,md5(COALESCE(string_agg(row_to_json(t)::text,chr(31) ORDER BY row_to_json(t)::text),repeat(chr(32),0))) AS hash FROM "'+table+'" t';result[table]=await p.$queryRawUnsafe(q);}const originals=[];for(const photo of await p.acquisitionPhoto.findMany({where:{purgedAt:null,ready:true},orderBy:{id:'asc'}})){const bytes=fs.readFileSync(process.env.UPLOADS_DATA_PATH+'/acquisition-v1/'+photo.id+'.original'),digest=crypto.createHash('sha256').update(bytes).digest('hex');if(digest!==photo.digest||bytes.length!==photo.bytes)throw Error('Original changed');originals.push({id:photo.id,digest,bytes:bytes.length});}return{tables:result,originals};`);
   const before=snapshot(),reviewBefore=database<any>(`return p.acquisitionCandidate.findFirstOrThrow({where:{run:{sessionId:${JSON.stringify(batch)}},acquisitionOrder:0},select:{review:true,physicalId:true,countConfirmed:true}});`);
   await page.setViewportSize({width:1366,height:900});await page.goto(`/imports/scan?batch=${batch}`);
+  await page.getByRole('button',{name:'Two-column list',exact:true}).click();
   const first=page.getByTestId('capture-card-1'),second=page.getByTestId('capture-card-2');
   await first.getByRole('button',{name:'Ignore scan',exact:true}).click();await expect(first).toBeHidden();
   await expect(page.getByTestId('scan-review-summary')).toContainText('1 ignored');
@@ -50,13 +51,13 @@ test("Ignore, Undo and Restore preserve saved choices and scans across desktop/p
   await second.getByRole('button',{name:'Ignore and next',exact:true}).click();await expect(second).toBeHidden();
   await expect(page.getByTestId('capture-card-3')).toBeVisible();
   await expect(page.getByTestId('scan-review-summary')).toContainText('2 ignored');
-  await page.getByLabel('Show cards',{exact:true}).selectOption('ignored');await expect(first).toBeVisible();
+  await page.getByRole('combobox',{name:'Show cards',exact:true}).selectOption('ignored');await expect(first).toBeVisible();
   await expect(first.getByRole('img',{name:'Ignored scan 1',exact:true})).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('ignored-desktop.png')});
   await page.setViewportSize({width:390,height:844});await expect(first.getByRole('button',{name:'Restore scan',exact:true})).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('ignored-phone.png')});
   await first.getByRole('button',{name:'Restore scan',exact:true}).click();
-  await expect(first).toBeHidden();await page.getByLabel('Show cards',{exact:true}).selectOption('all');
+  await expect(first).toBeHidden();await page.getByRole('combobox',{name:'Show cards',exact:true}).selectOption('all');
   await page.reload();await expect(page.getByTestId('scan-review-summary')).toContainText('1 ignored');
   await expect.poll(()=>database<any>(`return p.acquisitionCandidate.findFirstOrThrow({where:{run:{sessionId:${JSON.stringify(batch)}},acquisitionOrder:0},select:{review:true,physicalId:true,countConfirmed:true}});`)).toEqual(reviewBefore);
   const after=snapshot();expect(after).toEqual(before);

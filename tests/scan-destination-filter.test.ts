@@ -52,6 +52,7 @@ test("parent occupancy includes held cards in other sections and unsectioned bat
 test("advisory list uses existing reservation max minus receipts once, scoped to supplied locations", async () => {
   const original = location({ capacity: 10, quantity: 1, pendingQuantity: undefined });
   let query: any;
+  let ignored = false;
   const db = { acquisitionSession: { findMany: async (value: unknown) => {
     query = value;
     return [
@@ -59,8 +60,10 @@ test("advisory list uses existing reservation max minus receipts once, scoped to
       { locationId: "box", section: "Pending custom", scannerReserved: null, run: { id: "run-b", _count: { candidates: 2, slots: 3 } } },
     ];
   } }, acquisitionCandidate: { groupBy: async (value: any) => {
-    assert.deepEqual(value.where, { runId: { in: ["run-a", "run-b"] }, receipt: { isNot: null } });
-    return [{ runId: "run-a", _count: { _all: 1 } }, { runId: "run-b", _count: { _all: 1 } }];
+    assert.deepEqual(value.where, { runId: { in: ["run-a", "run-b"] }, OR: [{receipt: {isNot: null}}, {ignored: true}] });
+    assert.deepEqual(value.by, ["runId", "ignored"]);
+    return [{ runId: "run-a", ignored: false, _count: { _all: 1 } }, { runId: "run-b", ignored: false, _count: { _all: 1 } },
+      ...(ignored ? [{runId:"run-a",ignored:true,_count:{_all:1}}] : [])];
   } } } as unknown as Parameters<typeof scannerCapacityDestinations>[0];
   const [snapshot] = await scannerCapacityDestinations(db, [original]);
   assert.deepEqual(query.where.locationId, { in: ["box"] });
@@ -72,5 +75,10 @@ test("advisory list uses existing reservation max minus receipts once, scoped to
   assert.equal(scanParentRoom(snapshot), 3);
   assert.equal(original.pendingQuantity, undefined);
   assert.equal(original.sections[0].pendingQuantity, 2);
+  ignored = true;
+  const [withoutIgnored] = await scannerCapacityDestinations(db, [original]);
+  assert.equal(withoutIgnored.pendingQuantity, 5);
+  assert.equal(withoutIgnored.sections[0].pendingQuantity, 3);
+  assert.equal(scanParentRoom(withoutIgnored), 4);
   assert.deepEqual(await scannerCapacityDestinations(db, []), []);
 });
