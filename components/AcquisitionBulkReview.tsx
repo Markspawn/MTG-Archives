@@ -180,7 +180,8 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
     </details>}
     {open && <div className="space-y-3">
       <p className="text-sm">Compare each scan with its proposed printing. Every proposal starts selected; clear any that needs individual correction. This saves reviews only. Inventory is a separate step.</p>
-      <p className="text-sm">Batch defaults: {defaults.finish.toLowerCase()} · {defaults.condition ?? "condition unset"} · {defaults.language?.toUpperCase()??"language from printing evidence"} · Original opener: {acquisitionOpenerName(defaults.openerPlayerId, openerChoices)}. Cards in a different language need individual review. Change batch defaults or correct a card before confirming if these do not apply.</p>
+      <p className="text-sm">Batch defaults: {defaults.finish.toLowerCase()} · {defaults.condition ?? "condition unset"} · {defaults.language?.toUpperCase()??"language from printing evidence"} · Original opener: {acquisitionOpenerName(defaults.openerPlayerId, openerChoices)}. Proposed printings in a different language need individual review. Change batch defaults or correct a card before confirming if these do not apply.</p>
+      {defaults.language === "en" && <p className="text-sm">English batch: scan language warnings do not block bulk confirmation of English printings.</p>}
       <button className={button} disabled={saving} onClick={close}>Back to card list</button>
       {loading && <p role="status">Loading proposals: {loaded} of {previewTotal}</p>}
       {error && <p role="alert">{error}</p>}

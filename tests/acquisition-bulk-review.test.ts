@@ -21,8 +21,37 @@ test("intentional exclusions report actionable reasons",()=>{
   assert.match(acquisitionBulkReviewBlock(record(),{...defaults,condition:null})!,/batch condition/);
   const unknown=record();unknown.suggestions[0].printing.lang=null;assert.match(acquisitionBulkReviewBlock(unknown,defaults)!,/no language/);
   const foreign=record();foreign.suggestions[0].printing.lang="ja";assert.match(acquisitionBulkReviewBlock(foreign,defaults)!,/JA.*EN/);
-  const conflict=record();conflict.evidence!.identifiers.languages=["en","fr"];assert.match(acquisitionBulkReviewBlock(conflict,defaults)!,/FR.*EN/);
   assert.match(acquisitionBulkReviewBlock(record(),{...defaults,finish:"UNKNOWN"})!,/finish/);
+});
+
+test("an explicit English batch default overrides OCR-only language disagreements",()=>{
+  for(const languages of [["fr"],["ja"],["en","fr"],["FR","de","EN"]]){
+    const r=record();r.evidence!.identifiers.languages=languages;
+    assert.equal(acquisitionBulkReviewBlock(r,defaults),null);
+    assert.deepEqual(r.evidence!.identifiers.languages,languages); // Keep the observed evidence.
+    assert.equal(r.suggestions[0].printing.lang,"en");
+  }
+});
+
+test("English-default language tolerance keeps other exclusions and printing identity",()=>{
+  const r=record();r.evidence!.identifiers.languages=["fr"];
+  assert.match(acquisitionBulkReviewBlock(r,defaults,true)!,/Unsaved correction/);
+  assert.match(acquisitionBulkReviewBlock(r,{...defaults,condition:null})!,/batch condition/);
+  assert.match(acquisitionBulkReviewBlock(r,{...defaults,finish:"UNKNOWN"})!,/finish/);
+  r.suggestions[0].printing.lang="fr";
+  assert.match(acquisitionBulkReviewBlock(r,defaults)!,/FR.*EN/);
+  assert.equal(r.suggestions[0].printing.lang,"fr");
+  r.suggestions[0].printing.lang=null;
+  assert.match(acquisitionBulkReviewBlock(r,defaults)!,/no language/);
+});
+
+test("non-English batch defaults retain their existing OCR language checks",()=>{
+  const r=record();r.suggestions[0].printing.lang="fr";
+  const french={...defaults,language:"fr" as const};
+  r.evidence!.identifiers.languages=["fr"];
+  assert.equal(acquisitionBulkReviewBlock(r,french),null);
+  r.evidence!.identifiers.languages=["en","fr"];
+  assert.match(acquisitionBulkReviewBlock(r,french)!,/EN.*FR/);
 });
 test("saved per-card choices are never overwritten by bulk defaults",()=>{
   const r=record();r.review={cardId:"card",finish:"FOIL",condition:"LP",language:"en",actorId:"user"};

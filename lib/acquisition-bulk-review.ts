@@ -13,7 +13,10 @@ export function acquisitionBulkReviewBlock(record: AcquisitionCardReview, defaul
   if (language && printing.lang.toLowerCase() !== language)
     return `The proposed printing is ${printing.lang.toUpperCase()}, but the batch is ${language.toUpperCase()}. Check the language individually.`;
   const conflicts = [...new Set(record.evidence?.identifiers.languages.map(value => value.toLowerCase()).filter(value => language && value !== language) ?? [])];
-  if (conflicts.length) return `The scan reports ${conflicts.map(value => value.toUpperCase()).join(", ")}, conflicting with batch ${language!.toUpperCase()}. Check the scan and correct its language individually.`;
+  // An explicit English batch default is the operator's language choice for
+  // bulk review. Retain OCR evidence, but do not let its language guess veto
+  // an English printing. Other batch languages keep their existing checks.
+  if (language !== "en" && conflicts.length) return `The scan reports ${conflicts.map(value => value.toUpperCase()).join(", ")}, conflicting with batch ${language!.toUpperCase()}. Check the scan and correct its language individually.`;
   if (!finishForPrinting(defaults.finish, printing)) return "Choose a finish supported by this printing before confirming.";
   return null;
 }
