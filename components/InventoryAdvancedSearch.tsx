@@ -1419,7 +1419,7 @@ export function InventoryAdvancedSearch({
                   label="Set"
                   name="set"
                   initialTokens={values(params, "set")}
-                  placeholder="TLA or Avatar"
+                  placeholder="Search set names or codes..."
                   options={setAutocompleteOptions}
                   normalizeToken={(value) => value.trim().toLowerCase()}
                   tokenLabel={(value) => value.toUpperCase()}
