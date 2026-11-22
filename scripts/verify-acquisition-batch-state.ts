@@ -28,8 +28,8 @@ export async function seedBatchStateFixture(db: PrismaClient, tag: string) {
   }
   const runId=captures[0].runId;
   const entries=Array.from({length:100},(_,position)=>({slotId:randomUUID(),photoId:randomUUID(),candidateId:randomUUID(),artifactId:randomUUID(),position}));
-  await db.acquisitionCaptureSlot.createMany({data:entries.map(e=>({id:e.slotId,runId,requestKey:randomUUID(),position:e.position,generation:1}))});
-  await db.acquisitionPhoto.createMany({data:entries.map(e=>({id:e.photoId,runId,slotId:e.slotId,generation:1,uploadKey:randomUUID(),ready:true,readyAt:new Date(),
+  await db.acquisitionCaptureSlot.createMany({data:entries.map(e=>({id:e.slotId,runId,requestKey:randomUUID(),position:e.position,generation:2}))});
+  await db.acquisitionPhoto.createMany({data:entries.map(e=>({id:e.photoId,runId,slotId:e.slotId,generation:2,uploadKey:randomUUID(),ready:true,readyAt:new Date(),
     bytes:500,mediaType:"image/png",width:300,height:420,digest:"a".repeat(64),inputKind:"CARD_SCAN"}))});
   const review={cardId:card.id,finish:"NONFOIL",condition:"NM",language:"en",actorId:ids[0]};
   await db.acquisitionCandidate.createMany({data:entries.map(e=>({id:e.candidateId,runId,physicalId:e.slotId,identityKind:"EPISODE",
@@ -43,7 +43,7 @@ export async function seedBatchStateFixture(db: PrismaClient, tag: string) {
   await db.acquisitionProcessingJob.createMany({data:[entries[0],entries[20]].map(e=>({runId,candidateId:e.candidateId,artifactId:e.artifactId,
     candidateRevision:0,stage:PRINTING_STAGE,versionKey:"older-failed-fixture",status:"FAILED",input:{photoId:e.photoId,digest:"a".repeat(64)},
     createdAt:new Date("2026-01-01T00:00:00Z")}))});
-  const oldPhoto=await db.acquisitionPhoto.create({data:{runId,slotId:entries[1].slotId,generation:0,uploadKey:randomUUID(),ready:true,readyAt:new Date(),
+  const oldPhoto=await db.acquisitionPhoto.create({data:{runId,slotId:entries[1].slotId,generation:1,uploadKey:randomUUID(),ready:true,readyAt:new Date(),
     bytes:500,mediaType:"image/png",width:300,height:420,digest:"b".repeat(64),inputKind:"CARD_SCAN"}});
   const oldArtifact=await db.acquisitionArtifact.create({data:{runId,sourceId:oldPhoto.id,digest:oldPhoto.digest}});
   await db.acquisitionProcessingJob.create({data:{runId,candidateId:entries[1].candidateId,artifactId:oldArtifact.id,candidateRevision:0,stage:PRINTING_STAGE,
