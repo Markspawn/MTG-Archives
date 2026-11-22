@@ -7,11 +7,11 @@ export type AcquisitionBatchStates = {
 };
 
 const stages = [
-  {key: "queued", label: "Queued / evaluating", color: "bg-blue-500"},
-  {key: "evaluated", label: "Evaluated · unconfirmed", color: "bg-amber-400"},
-  {key: "confirmed", label: "Confirmed · not added", color: "bg-violet-500"},
-  {key: "inventory", label: "In Inventory", color: "bg-emerald-500"},
-  {key: "ignored", label: "Ignored", color: "bg-slate-400"},
+  {key: "queued", label: "Queued / evaluating"},
+  {key: "evaluated", label: "Evaluated · unconfirmed"},
+  {key: "confirmed", label: "Confirmed · not added"},
+  {key: "inventory", label: "In Inventory"},
+  {key: "ignored", label: "Ignored"},
 ] as const;
 
 /** These are exclusive counts from PostgreSQL, not the overlapping dashboard

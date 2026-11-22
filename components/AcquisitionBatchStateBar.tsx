@@ -1,9 +1,12 @@
 import {acquisitionBatchSegments, type AcquisitionBatchStates} from "@/lib/acquisition-batch-state";
 
 const format = (count: number) => count.toLocaleString("en-US");
+// Keep literal classes in a scanned component so every stage ships its color.
+const colors = {queued: "bg-blue-500", evaluated: "bg-amber-400", confirmed: "bg-violet-500",
+  inventory: "bg-emerald-500", ignored: "bg-slate-400"} as const;
 
 export function AcquisitionBatchStateBar({total, states}: {total: number; states: AcquisitionBatchStates}) {
-  const segments = acquisitionBatchSegments(total, states);
+  const segments = acquisitionBatchSegments(total, states).map(stage => ({...stage, color: colors[stage.key]}));
   const summary = segments.map(stage => `${format(stage.count)} ${stage.label.toLowerCase()}`).join(", ");
   return <figure aria-label="Batch card states" className="min-w-0 space-y-2" data-saved-total={total}>
     <figcaption className="text-sm"><span className="font-semibold tabular-nums">{format(total)}</span> saved cards</figcaption>

@@ -31,6 +31,8 @@ test("existing batch entries show exact state colors and refresh their whole-bat
   expect(await counts()).toEqual({queued:20,evaluated:30,confirmed:25,inventory:23,ignored:2});
   const widths=await graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>nodes.map(n=>(n as HTMLElement).style.width));
   expect(widths).toEqual(['20%','30%','25%','23%','2%']);
+  const colors=await graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).backgroundColor));
+  expect(new Set(colors).size).toBe(5);expect(colors).not.toContain('rgba(0, 0, 0, 0)');expect(colors).not.toContain('transparent');
   await expect(entry).toContainText('Batch state review box');await expect(entry).toContainText('A');
   await expect(entry.getByRole('link',{name:'Open batch',exact:true})).toHaveAttribute('href','/imports/scan?batch='+batch.sessionId);
   await expect(entry.getByRole('button',{name:'Cancel batch',exact:true})).toBeVisible();
@@ -43,6 +45,7 @@ test("existing batch entries show exact state colors and refresh their whole-bat
   await expect.poll(counts).toEqual({queued:19,evaluated:31,confirmed:25,inventory:23,ignored:2});
   database(`const f=${JSON.stringify(fixture)};await p.acquisitionCandidate.update({where:{id:f.entries[20].candidateId},data:{review:{cardId:f.cardId,finish:'NONFOIL',condition:'NM',language:'en',actorId:f.ids[0]}}});return true;`);
   await expect.poll(counts,{timeout:30000,intervals:[1000]}).toEqual({queued:19,evaluated:30,confirmed:26,inventory:23,ignored:2});
+  expect(await graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).backgroundColor))).toEqual(colors);
   expect(Object.values(await counts()).reduce((a,b)=>a+b,0)).toBe(100);
   for(const width of [1366,320]){
     await page.setViewportSize({width,height:900});
