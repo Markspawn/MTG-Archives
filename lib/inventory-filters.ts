@@ -346,7 +346,7 @@ export function buildInventoryWhereFromFilters(
     appendAnd(where, {
       OR: filters.sets.flatMap((set) => [
         { card: { setCode: { equals: set, mode: "insensitive" } } },
-        { card: { setName: { contains: set, mode: "insensitive" } } },
+        { card: { setName: { equals: set, mode: "insensitive" } } },
       ]),
     });
   if (filters.rarities.length)
