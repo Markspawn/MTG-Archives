@@ -3,6 +3,7 @@ import { ImportTaskNav } from "@/components/ImportTaskNav";
 import { AcquisitionBatchActions } from "@/components/AcquisitionBatchActions";
 import { AcquisitionBatchRefresh } from "@/components/AcquisitionBatchRefresh";
 import { AcquisitionRerunControl } from "@/components/AcquisitionRerunControl";
+import {AcquisitionBatchStateBar} from "@/components/AcquisitionBatchStateBar";
 import { requireLogin, isAdminModeEnabled } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { batchDashboardQuery, getAcquisitionBatchDashboard } from "@/lib/acquisition-batch-dashboard";
@@ -28,7 +29,7 @@ export default async function BatchDashboardPage({searchParams}: {searchParams: 
         <div key={label} className={`${panel} p-3`}><p className="text-xs text-[var(--app-muted)]">{label}</p><p className="text-2xl font-semibold tabular-nums">{format(count)}</p></div>)}
     </section>
     <details className="text-sm text-[var(--app-muted)]"><summary className="cursor-pointer">What the totals mean</summary>
-      <p className="mt-2">Evaluated cards have a completed printing check or a saved match review. Assigned to storage means a batch destination has been chosen for those cards. Confirmed matches have a complete saved printing review. Added to Inventory counts completed additions. Totals exclude Trash; retries and repeat images do not count as more cards.</p></details>
+      <p className="mt-2">The summary totals above overlap: confirmed and added cards also count as evaluated. Each batch's colored breakdown counts every saved card once. Queued / evaluating means checking is unfinished; evaluated · unconfirmed means the printing check finished and the card awaits review; confirmed · not added means a saved review awaits Inventory addition. Ignored cards remain part of the saved total. Assigned to storage means a batch destination has been chosen. Totals exclude Trash; retries do not count as more cards.</p></details>
     <section aria-label="Batch list" className="space-y-3">
       <nav aria-label="Batch status" className="flex flex-wrap gap-2">{views.map(view => <a key={view.id} href={href(view.id)} aria-current={query.view === view.id ? "page" : undefined}
         className={`${button} ${query.view === view.id ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)]" : ""}`}>{view.label}</a>)}</nav>
@@ -43,8 +44,7 @@ export default async function BatchDashboardPage({searchParams}: {searchParams: 
         <div className="flex flex-wrap gap-2 items-start justify-between"><div className="min-w-0"><h2 className="font-semibold text-lg">Batch {batch.batchNumber}</h2>
           <p className="text-sm break-words">{batch.location ?? "Storage unavailable"}{batch.section ? ` · ${batch.section}` : ""} · {batch.owner}</p></div>
           <span className="rounded border border-[var(--app-border)] px-2 py-1 text-xs">{batch.trashed ? "In Trash" : batch.cancelled ? batch.draining ? "Cancelled · waiting for scanner" : "Cancelled" : !batch.pending ? "Closed" : batch.phase === "PAUSED" ? "Waiting for refill" : batch.phase === "CAPTURING" ? "Scanning" : batch.phase === "STOPPING" ? "Finishing accepted load" : "Needs review"}</span></div>
-        <dl className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-sm">{([ ["Saved", batch.captured], ["Evaluated", batch.evaluated], ["Storage assigned", batch.assigned], ["Confirmed", batch.confirmed], ["In Inventory", batch.added], ["Ignored", batch.ignored] ] as const).map(([label, count]) =>
-          <div key={label}><dt className="text-xs text-[var(--app-muted)]">{label}</dt><dd className="font-semibold tabular-nums">{format(count)}</dd></div>)}</dl>
+        <AcquisitionBatchStateBar total={batch.captured} states={batch.states} />
         {!batch.cancelled && !batch.trashed && batch.pending && <p className="text-sm">{format(batch.captured - batch.ignored - batch.confirmed)} {batch.captured - batch.ignored - batch.confirmed === 1 ? "match needs" : "matches need"} confirmation · {format(batch.confirmed - batch.added)} confirmed {batch.confirmed - batch.added === 1 ? "card awaits" : "cards await"} Inventory addition{batch.failed ? ` · ${format(batch.failed)} ${batch.failed === 1 ? "card needs" : "cards need"} processing attention` : ""}</p>}
         {batch.trashExpiresAt && batch.trashed && <p className="text-sm">Restore before {new Date(batch.trashExpiresAt).toLocaleString("en-US", {timeZone: "America/Chicago"})}.</p>}
         <div className="flex flex-wrap items-start gap-3">{!batch.trashed && <a href={`/imports/scan?batch=${encodeURIComponent(batch.id)}`} className={button}>{batch.cancelled ? "View saved cards" : "Open batch"}</a>}
