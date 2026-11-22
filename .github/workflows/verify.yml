@@ -149,6 +149,8 @@ jobs:
         run: npx tsx scripts/verify-acquisition-rerun.ts --run
       - name: Recoverable ignored scans, stale review/commit and worker conservation
         run: npx tsx scripts/verify-acquisition-ignore.ts --run
+      - name: Exclusive saved-card batch infographic counts and live transitions
+        run: npx tsx scripts/verify-acquisition-batch-state.ts --run
       - name: Retain the pinned original hydration ordering failure
         run: |
           mkdir -p .local-data/acquisition-order

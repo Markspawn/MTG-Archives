@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isAdminUser } from "./auth-policy";
 import type { AcquisitionActor } from "./acquisition-store";
 import { PRINTING_STAGE } from "./acquisition-printing";
+import type {AcquisitionBatchStates} from "./acquisition-batch-state";
 
 export const batchDashboardQuery = z.object({
   view: z.enum(["pending", "all", "closed", "cancelled", "trash"]).catch("pending"),
@@ -15,6 +16,7 @@ export type BatchDashboardRow = {
   owner: string; captured: number; evaluated: number; assigned: number; confirmed: number;
   added: number; ignored: number; processing: number; failed: number; pending: boolean;
   draining: boolean;
+  states: AcquisitionBatchStates;
 };
 export type BatchDashboard = {
   rows: BatchDashboardRow[]; total: number; page: number; pages: number;
@@ -65,6 +67,9 @@ export async function getAcquisitionBatchDashboard(db: PrismaClient, actor: Acqu
         COUNT(c.id) FILTER (WHERE NOT c.ignored AND review.confirmed)::int AS confirmed,
         COUNT(receipt."candidateId")::int AS added,
         COUNT(c.id) FILTER (WHERE c.ignored)::int AS ignored,
+        COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND c.ignored)::int AS "ignoredPending",
+        COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND NOT c.ignored AND review.confirmed)::int AS "confirmedPending",
+        COUNT(c.id) FILTER (WHERE receipt."candidateId" IS NULL AND NOT c.ignored AND NOT review.confirmed AND checked.status='COMPLETE')::int AS "evaluatedPending",
         COUNT(c.id) FILTER (WHERE NOT c.ignored AND receipt."candidateId" IS NULL AND NOT review.confirmed AND checked.status IS DISTINCT FROM 'COMPLETE')::int AS processing,
         COUNT(c.id) FILTER (WHERE NOT c.ignored AND receipt."candidateId" IS NULL AND NOT review.confirmed AND failed."candidateId" IS NOT NULL)::int AS failed
       FROM sessions s LEFT JOIN "AcquisitionCandidate" c ON c."runId"=s."runId" AND NOT c.excluded
@@ -80,6 +85,8 @@ export async function getAcquisitionBatchDashboard(db: PrismaClient, actor: Acqu
     ), metrics AS (
       SELECT s.id,s."batchNumber",s.phase,s.cancelled,s.trashed,s.draining,s."updatedAt",s."trashExpiresAt",s.location,s.section,s.owner,
         c.captured,c.evaluated,c.assigned,c.confirmed,c.added,c.ignored,c.processing,c.failed,
+        jsonb_build_object('queued',c.processing,'evaluated',c."evaluatedPending",
+          'confirmed',c."confirmedPending",'inventory',c.added,'ignored',c."ignoredPending") AS states,
         (NOT s.cancelled AND (c.captured>c.added+c.ignored OR s.phase IN ('DRAFT','CAPTURING','PAUSED','STOPPING'))) AS pending
       FROM sessions s JOIN counts c ON c.id=s.id
     ), filtered AS (
@@ -91,7 +98,7 @@ export async function getAcquisitionBatchDashboard(db: PrismaClient, actor: Acqu
     )
     SELECT COALESCE((SELECT jsonb_agg(to_jsonb(page)) FROM (
       SELECT id,"batchNumber",phase,cancelled,trashed,draining,"updatedAt","trashExpiresAt",location,section,owner,
-        captured,evaluated,assigned,confirmed,added,ignored,processing,failed,pending FROM filtered
+        captured,evaluated,assigned,confirmed,added,ignored,processing,failed,pending,states FROM filtered
       ORDER BY "updatedAt" DESC,id DESC LIMIT 25 OFFSET (SELECT (page - 1) * 25 FROM pagination)) page),'[]'::jsonb) AS rows,
       (SELECT total FROM pagination) AS total, (SELECT page FROM pagination) AS page,
       (SELECT jsonb_build_object('batches',COUNT(*),'pending',COUNT(*) FILTER (WHERE pending),
