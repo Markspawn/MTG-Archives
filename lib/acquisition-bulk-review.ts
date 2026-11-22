@@ -3,6 +3,7 @@ import {finishForPrinting} from "./acquisition-finish";
 
 /** Explain the same safeguards used to decide which proposals may be bulk saved. */
 export function acquisitionBulkReviewBlock(record: AcquisitionCardReview, defaults: AcquisitionDefaults, hasDraft = false): string | null {
+  if (record.ignored) return "This scan is ignored. Restore it before confirming.";
   if (hasDraft) return "Unsaved correction: save or cancel it first.";
   if (record.review) return "This card already has a saved review; correct its saved details individually if needed.";
   const printing = acquisitionPreferredPrinting(record);

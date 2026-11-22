@@ -7,11 +7,11 @@ import { scannerCapacityDestination } from "./scanner-capacity-display";
 import {settledScannerTransfer} from "./scanner-drain-policy";
 
 export function scannerReservedSpace(input: { reserved: number | null; candidateCount: number;
-  slotCount: number; committedCount: number }) {
-  // Every retained card consumes space until explicitly committed. Excluding a
-  // review candidate does not prove that the physical card left the destination.
+  slotCount: number; committedCount: number; ignoredCount?: number }) {
+  // Ignored scans no longer reserve Inventory placement. Their physical slots
+  // still consume the capture target; false-detection exclusion is unrelated.
   // The unconsumed part of an unfinished scanner target also stays allocated.
-  return Math.max(0, Math.max(input.reserved ?? 0, input.candidateCount, input.slotCount) - input.committedCount);
+  return Math.max(0, Math.max(input.reserved ?? 0, input.candidateCount, input.slotCount) - input.committedCount - (input.ignoredCount ?? 0));
 }
 
 /** Advisory list snapshot only. Start and commit still lock and recheck capacity.
@@ -26,15 +26,17 @@ export async function scannerCapacityDestinations(db: Pick<PrismaClient, "acquis
     _count: { select: { candidates: true, slots: true } },
   } } } });
   const runIds = sessions.flatMap(session => session.run ? [session.run.id] : []);
-  const receipts = runIds.length ? await db.acquisitionCandidate.groupBy({ by: ["runId"],
-    where: { runId: { in: runIds }, receipt: { isNot: null } }, _count: { _all: true } }) : [];
-  const committed = new Map(receipts.map(row => [row.runId, row._count._all]));
+  const receipts = runIds.length ? await db.acquisitionCandidate.groupBy({ by: ["runId", "ignored"],
+    where: { runId: { in: runIds }, OR: [{receipt: {isNot: null}}, {ignored: true}] }, _count: { _all: true } }) : [];
+  const committed = new Map(receipts.filter(row => !row.ignored).map(row => [row.runId, row._count._all]));
+  const ignored = new Map(receipts.filter(row => row.ignored).map(row => [row.runId, row._count._all]));
   const pending = new Map<string, Map<string | null, number>>();
   for (const session of sessions) {
     if (!session.locationId) continue;
     const quantity = scannerReservedSpace({ reserved: session.scannerReserved,
       candidateCount: session.run?._count.candidates ?? 0, slotCount: session.run?._count.slots ?? 0,
-      committedCount: session.run ? committed.get(session.run.id) ?? 0 : 0 });
+      committedCount: session.run ? committed.get(session.run.id) ?? 0 : 0,
+      ignoredCount: session.run ? ignored.get(session.run.id) ?? 0 : 0 });
     const sections = pending.get(session.locationId) ?? new Map<string | null, number>();
     const section = normalizeLocationSection(session.section);
     sections.set(section, (sections.get(section) ?? 0) + quantity);
@@ -61,14 +63,15 @@ export async function readScannerCapacity(tx: Prisma.TransactionClient, input: {
     ...(input.excludeSessionId ? { id: { not: input.excludeSessionId } } : {}) }, select: {
     section: true, scannerReserved: true, run: { select: { _count: { select: {
       candidates: true, slots: true,
-    } }, candidates: { select: { receipt: { select: { candidateId: true } } } } } },
+    } }, candidates: { select: { ignored: true, receipt: { select: { candidateId: true } } } } } },
   } });
   let pendingTotal = 0, pendingSection = 0;
   const pendingSections = new Map<string | null, number>();
   for (const session of sessions) {
     const pending = scannerReservedSpace({ reserved: session.scannerReserved,
       candidateCount: session.run?._count.candidates ?? 0, slotCount: session.run?._count.slots ?? 0,
-      committedCount: session.run?.candidates.filter(c => c.receipt).length ?? 0 });
+      committedCount: session.run?.candidates.filter(c => c.receipt).length ?? 0,
+      ignoredCount: session.run?.candidates.filter(c => c.ignored && !c.receipt).length ?? 0 });
     pendingTotal += pending;
     const section = normalizeLocationSection(session.section);
     pendingSections.set(section, (pendingSections.get(section) ?? 0) + pending);

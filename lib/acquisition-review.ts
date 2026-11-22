@@ -53,6 +53,10 @@ export function preserveAcquisitionReviewOpener(
     ? {...decision, openerPlayerId: review.openerPlayerId} : decision;
 }
 export const acquisitionReviewRequestSchema = z.discriminatedUnion("action", [
+  z.object({action:z.literal("ignore"), photoId:z.string().uuid(),
+    revision:z.number().int().nonnegative(), requestKey:z.string().uuid()}).strict(),
+  z.object({action:z.literal("restore"), photoId:z.string().uuid(),
+    revision:z.number().int().nonnegative(), requestKey:z.string().uuid()}).strict(),
   z
     .object({
       action: z.literal("defaults"),
@@ -108,6 +112,7 @@ export const acquisitionPrintingSelect = {
   finishes: true,
 } as const;
 export type AcquisitionCardReview = {
+  ignored?: boolean;
   photoId: string;
   evidenceToken?: string;
   revision: number;

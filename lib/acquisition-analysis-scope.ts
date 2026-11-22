@@ -25,7 +25,7 @@ const boundIntent = Prisma.sql`(c."manualAnalysis" IS NOT NULL
       AND c."manualAnalysis"->>'generation'=scope_photo.generation::text))`;
 
 export function acquisitionAnalysisReadySql() {
-  return Prisma.sql`(NOT c.excluded AND (c.review IS NULL OR
+  return Prisma.sql`(NOT c.excluded AND NOT c.ignored AND (c.review IS NULL OR
     (${boundIntent} AND c."manualAnalysis"->>'candidateRevision'=c.revision::text)))`;
 }
 
@@ -40,9 +40,9 @@ export function acquisitionAnalysisCandidateFence(rawInput: unknown): Prisma.Acq
     (rawInput as {manualAnalysis?: unknown} | null)?.manualAnalysis);
   // Ordinary historical jobs still require an unreviewed candidate. Only an
   // exact, explicit repair instruction permits a reviewed candidate's attempt.
-  return parsed.success ? {manualAnalysis: {equals: parsed.data}, OR: [
+  return parsed.success ? {ignored: false, manualAnalysis: {equals: parsed.data}, OR: [
     {review: {equals: Prisma.DbNull}}, {revision: parsed.data.candidateRevision},
-  ]} : {review: {equals: Prisma.DbNull}};
+  ]} : {ignored: false, review: {equals: Prisma.DbNull}};
 }
 
 export function acquisitionAnalysisOutputMatches(input: unknown, output: Prisma.InputJsonObject, stage: string) {

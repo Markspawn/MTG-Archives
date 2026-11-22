@@ -86,7 +86,7 @@ async function request<T>(url: string, value?: unknown, signal?: AbortSignal): P
         },
   );
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "Request failed; retry");
+  if (!response.ok) throw Object.assign(new Error(result.error ?? "Request failed; retry"), {responseReceived: true});
   return result;
 }
 export function AcquisitionCapture({
@@ -279,7 +279,8 @@ export function AcquisitionCapture({
   );
   // Keep visited editors mounted: moving between cards must not discard a live
   // correction, failed storage write or an in-flight review response.
-  const focusedSlot = progress?.slots.find(slot => slot.id === focusedSlotId) ?? filteredSlots[0];
+  const focusedSlot = progress?.slots.find(slot => slot.id === focusedSlotId &&
+    (reviewFilter === "ignored" ? slot.ignored : !slot.ignored)) ?? filteredSlots[0];
   const focusedId = focusedSlot?.id;
   const focusedIndex = filteredSlots.findIndex(slot => slot.id === focusedSlot?.id);
   const renderedSlots = reviewLayout === "list" ? shownSlots : (progress?.slots ?? []).filter(slot =>
@@ -351,6 +352,39 @@ export function AcquisitionCapture({
     return () => observer.disconnect();
   }, [visibleCount, filteredSlots.length, reviewLayout]);
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  const [ignoreBusy, setIgnoreBusy] = useState(false);
+  const pendingIgnore = useRef<{action: "ignore" | "restore"; photoId: string; revision: number; requestKey: string} | null>(null);
+  const [undoIgnored, setUndoIgnored] = useState<{photoId: string; revision: number; position: number} | null>(null);
+  useEffect(() => { setUndoIgnored(null); pendingIgnore.current = null; }, [batchId]);
+  async function changeIgnored(slot: Progress["slots"][number], action: "ignore" | "restore", revision = slot.reviewRevision) {
+    const photo = slot.photos.find(photo => photo.ready && !photo.purgedAt && photo.generation === slot.generation);
+    if (!photo || ignoreBusy || busyReviews.size || action === "ignore" && !canUsePhotos([photo.id])) return;
+    if (pendingIgnore.current && (pendingIgnore.current.photoId !== photo.id || pendingIgnore.current.action !== action)) {
+      setError("Retry the previous Ignore or Restore action before changing another scan."); return;
+    }
+    pendingIgnore.current ??= {action, photoId: photo.id, revision, requestKey: captureUuid()};
+    setIgnoreBusy(true); setError("");
+    try {
+      const result = await request<{revision: number}>(`/api/acquisition/${batchId}/review`,
+        pendingIgnore.current);
+      pendingIgnore.current = null;
+      setSelectedPhotos(ids => ids.filter(id => id !== photo.id));
+      if (action === "ignore") {
+        setUndoIgnored({photoId: photo.id, revision: result.revision, position: slot.position});
+        const next = nextAwaitingAcquisitionSlot(progress?.slots ?? [], slot.position, hasDraft);
+        setFocusedSlotId(next?.id ?? null);
+        setReviewNavigation(`Card ${slot.position + 1} ignored. Your scan and saved review are kept.`);
+      } else {
+        setUndoIgnored(null);
+        setReviewNavigation(`Card ${slot.position + 1} restored with its saved review.`);
+      }
+      await refresh();
+    } catch (error) {
+      if ((error as {responseReceived?: boolean}).responseReceived) pendingIgnore.current = null;
+      setError((error as Error).message);
+    }
+    finally { setIgnoreBusy(false); }
+  }
   const [bulkOpen, setBulkOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [inventoryPreviewRequest,setInventoryPreviewRequest] = useState<{id:number;all:boolean}>();
@@ -963,7 +997,7 @@ export function AcquisitionCapture({
             </div>
             <p className="text-xs tabular-nums" data-testid="scan-review-summary">
               {reviewCounts.ready} ready to preview ·{" "}
-              {reviewCounts.awaiting} pending review or reconciliation · {reviewCounts.added} added
+               {reviewCounts.awaiting} pending review or reconciliation · {reviewCounts.added} added · {reviewCounts.ignored} ignored
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-1" aria-label="Batch actions">
             <a className={button + " !px-2 !py-1 text-xs"} href={`/imports/batches?q=${progress.batchNumber}&view=all`}>Manage batch</a>
@@ -1293,7 +1327,8 @@ export function AcquisitionCapture({
                       setVisibleCount(12);
                     }}
                   >
-                    <option value="all">All ({reviewCounts.all})</option>
+                    <option value="all">Active cards ({reviewCounts.all})</option>
+                    <option value="ignored">Ignored ({reviewCounts.ignored})</option>
                     <option value="awaiting">
                       Pending ({reviewCounts.awaiting})
                     </option>
@@ -1328,6 +1363,18 @@ export function AcquisitionCapture({
                 </p>
               )}
               <p role="status" className="text-xs min-h-5">{reviewNavigation}</p>
+              {pendingIgnore.current && !ignoreBusy && <button type="button" className={button} onClick={() => {
+                const pending = pendingIgnore.current;
+                const slot = progress.slots.find(slot => slot.photos.some(photo => photo.id === pending?.photoId));
+                if (pending && slot) void changeIgnored(slot, pending.action, pending.revision);
+              }}>Retry {pendingIgnore.current.action === "ignore" ? "Ignore" : "Restore"}</button>}
+              {undoIgnored && <div className="flex flex-wrap items-center gap-2 text-sm" role="status">
+                Card {undoIgnored.position + 1} ignored.
+                <button type="button" className={button} disabled={ignoreBusy || busyReviews.size > 0}
+                  onClick={() => { const slot = progress.slots.find(slot => slot.photos.some(photo => photo.id === undoIgnored.photoId));
+                    if (slot) void changeIgnored(slot, "restore", undoIgnored.revision); }}>Undo</button>
+                <span>Find saved scans under Show cards → Ignored.</span>
+              </div>}
               {reviewLayout === "focus" && <div ref={cardNavigator}
                 className="min-w-0 mb-2 py-1 sticky top-[var(--scan-toolbar-offset,10rem)] z-10"
                 style={{background:"var(--app-surface)"}} aria-label="Card navigator">
@@ -1374,13 +1421,27 @@ export function AcquisitionCapture({
                           Focus card {slot.position + 1}
                         </button>}
                       </p>
+                      {photo && !photo.purgedAt && !slot.committed && <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <button type="button" className={button}
+                          disabled={ignoreBusy || busyReviews.size > 0 || !cachedDrafts.ready || !slot.ignored && hasDraft(slot)}
+                          onClick={() => void changeIgnored(slot, slot.ignored ? "restore" : "ignore")}>
+                          {slot.ignored ? "Restore scan" : reviewLayout === "focus" ? "Ignore and next" : "Ignore scan"}
+                        </button>
+                        {hasDraft(slot) && <span>{slot.ignored ? "Restore to return to your unsaved correction." : "Save or cancel this correction before ignoring."}</span>}
+                      </div>}
                       {photoMatches.has(slot.id) && (
                         <p role="status" className="text-sm break-words rounded border border-amber-500/50 bg-amber-500/10 p-2">
                           This photo file appears {photoMatches.get(slot.id)} times in this batch.
                           {" "}Check for an accidental repeat. Separate physical cards still count separately.
                         </p>
                       )}
+                      {slot.ignored ? <div className="flex flex-wrap items-start gap-3 text-sm">
+                        {photo && !photo.purgedAt && <img src={`/api/acquisition/${batchId}/photos/${photo.id}?preview=1`}
+                          alt={`Ignored scan ${slot.position + 1}`} loading="lazy" className="w-32 max-w-full object-contain" />}
+                        <p>Ignored · Scan and saved review kept. Restore to continue reviewing or add this card to Inventory.</p>
+                      </div> : null}
                       {photo && !photo.purgedAt ? (
+                        <div hidden={slot.ignored}>
                         <AcquisitionPhotoReview
                           userId={userId}
                           openerChoices={openerChoices}
@@ -1396,6 +1457,7 @@ export function AcquisitionCapture({
                           onBusyChange={markReviewBusy}
                           onNextAwaiting={() => nextAwaitingReview(slot.position)}
                         />
+                        </div>
                       ) : (
                         <p className="text-sm">
                           {photo?.purgedAt
@@ -1417,7 +1479,7 @@ export function AcquisitionCapture({
                           Added to Inventory
                         </p>
                       )}
-                      {photo && slot.review && !slot.committed && (
+                      {photo && slot.review && !slot.committed && !slot.ignored && (
                         <div className="flex flex-wrap items-center gap-2">
                         <label className="flex gap-2 text-sm">
                           <input
@@ -1462,6 +1524,7 @@ export function AcquisitionCapture({
                           busy ||
                           pending ||
                           slot.committed ||
+                          slot.ignored ||
                           !["CAPTURING", "STOPPING"].includes(progress.phase)
                         }
                         onClick={() => {

@@ -51,7 +51,7 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
   }
   const awaiting = slots.flatMap(slot => {
     const photo = slot.photos.find(p => p.ready && !p.purgedAt && p.generation===slot.generation);
-    return photo && !slot.review && !slot.committed ? [{ photoId: photo.id, position: slot.position + 1 }] : [];
+    return photo && !slot.ignored && !slot.review && !slot.committed ? [{ photoId: photo.id, position: slot.position + 1 }] : [];
   });
   const available = awaiting.filter(item => !blockedPhotos.has(item.photoId));
   const skipped = awaiting.length - available.length;
@@ -95,9 +95,9 @@ export function AcquisitionBulkReview({ batchId, slots, defaults, refresh, onOpe
   const eligible = (row: Proposal) => draftsReady && !row.saved && !blockReason(row);
   const exclusions = [...new Map([
     ...awaiting.filter(item=>blockedPhotos.has(item.photoId)).map(item=>({...item,reason:"Unsaved correction: save or cancel it first."})),
-    ...slots.flatMap(slot=>slot.review && !slot.committed && !acquisitionReviewComplete(slot)?
+    ...slots.flatMap(slot=>slot.review && !slot.committed && !slot.ignored && !acquisitionReviewComplete(slot)?
       [{position:slot.position+1,photoId:slot.photos[0]?.id??"",reason:"The saved review is incomplete. Finish its details individually; batch defaults do not overwrite saved card choices."}]:[]),
-    ...slots.flatMap(slot=>!slot.committed && !slot.review && !slot.photos.some(photo=>photo.ready && !photo.purgedAt && photo.generation===slot.generation)?
+    ...slots.flatMap(slot=>!slot.committed && !slot.ignored && !slot.review && !slot.photos.some(photo=>photo.ready && !photo.purgedAt && photo.generation===slot.generation)?
       [{position:slot.position+1,photoId:slot.photos[0]?.id??slot.id,reason:"No current saved scan is available. Wait for the upload or check the card's photo."}]:[]),
     ...rows.flatMap(row=>!row.saved && !row.record.review && (row.error || blockReason(row)) ?
       [{photoId:row.photoId,position:row.position,reason:row.error || blockReason(row)!}]:[]),

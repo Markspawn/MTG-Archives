@@ -38,7 +38,7 @@ export async function confirmStrongAcquisitionMatches(db: PrismaClient) {
         OR (s."reviewDefaults"->>'language' IS NOT NULL
           AND j.output->'batchLanguageProposals'->>'version'='1'))
       AND j.output->'proposals'->>'version' = '4'
-      AND j."candidateRevision" = c.revision AND c.review IS NULL AND NOT c.excluded
+      AND j."candidateRevision" = c.revision AND c.review IS NULL AND NOT c.excluded AND NOT c.ignored
       AND COALESCE(j.input->'manualAnalysis'->'region','null'::jsonb)='null'::jsonb
       AND j.input->'referenceSource' IS NULL AND j.output->'referenceRefinement' IS NULL
       AND r."providerId" = 'phone-photo-v1'
@@ -93,6 +93,7 @@ export async function confirmStrongAcquisitionMatches(db: PrismaClient) {
         candidate.review !== null ||
         candidate.receipt ||
         candidate.excluded ||
+        candidate.ignored ||
         candidate.revision !== job.candidateRevision ||
         job.status !== "COMPLETE" ||
         ["DRAFT", "CANCELLED"].includes(session.phase) ||

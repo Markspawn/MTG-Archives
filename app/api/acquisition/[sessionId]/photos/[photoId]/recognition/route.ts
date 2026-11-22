@@ -40,13 +40,13 @@ export async function GET(
         stage: true,
         output: true,
         candidateRevision: true,
-        candidate: { select: { revision: true, excluded: true } },
+        candidate: { select: { revision: true, excluded: true, ignored: true } },
       },
     });
     const current = jobs.filter(
       (j) =>
         j.candidateRevision === j.candidate.revision &&
-        !j.candidate.excluded,
+        !j.candidate.excluded && !j.candidate.ignored,
     );
     const {evidence} = acquisitionRecognitionJobs(current,
       process.env.ACQUISITION_VISUAL_ENABLED === "1", process.env.ACQUISITION_PRINTING_ENABLED === "1");

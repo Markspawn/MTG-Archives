@@ -23,8 +23,8 @@ export default async function BatchDashboardPage({searchParams}: {searchParams: 
     <ImportTaskNav selected="batches" />
     <AcquisitionBatchRefresh />
     <AcquisitionRerunControl scope="MINE" />
-    <section aria-label="Card totals" className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      {([ ["Saved cards", data.totals.captured], ["Evaluated", data.totals.evaluated], ["Assigned to storage", data.totals.assigned], ["Confirmed matches", data.totals.confirmed], ["Added to Inventory", data.totals.added] ] as const).map(([label, count]) =>
+    <section aria-label="Card totals" className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      {([ ["Saved cards", data.totals.captured], ["Evaluated", data.totals.evaluated], ["Assigned to storage", data.totals.assigned], ["Confirmed matches", data.totals.confirmed], ["Added to Inventory", data.totals.added], ["Ignored", data.totals.ignored] ] as const).map(([label, count]) =>
         <div key={label} className={`${panel} p-3`}><p className="text-xs text-[var(--app-muted)]">{label}</p><p className="text-2xl font-semibold tabular-nums">{format(count)}</p></div>)}
     </section>
     <details className="text-sm text-[var(--app-muted)]"><summary className="cursor-pointer">What the totals mean</summary>
@@ -43,9 +43,9 @@ export default async function BatchDashboardPage({searchParams}: {searchParams: 
         <div className="flex flex-wrap gap-2 items-start justify-between"><div className="min-w-0"><h2 className="font-semibold text-lg">Batch {batch.batchNumber}</h2>
           <p className="text-sm break-words">{batch.location ?? "Storage unavailable"}{batch.section ? ` · ${batch.section}` : ""} · {batch.owner}</p></div>
           <span className="rounded border border-[var(--app-border)] px-2 py-1 text-xs">{batch.trashed ? "In Trash" : batch.cancelled ? batch.draining ? "Cancelled · waiting for scanner" : "Cancelled" : !batch.pending ? "Closed" : batch.phase === "PAUSED" ? "Waiting for refill" : batch.phase === "CAPTURING" ? "Scanning" : batch.phase === "STOPPING" ? "Finishing accepted load" : "Needs review"}</span></div>
-        <dl className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">{([ ["Saved", batch.captured], ["Evaluated", batch.evaluated], ["Storage assigned", batch.assigned], ["Confirmed", batch.confirmed], ["In Inventory", batch.added] ] as const).map(([label, count]) =>
+        <dl className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-sm">{([ ["Saved", batch.captured], ["Evaluated", batch.evaluated], ["Storage assigned", batch.assigned], ["Confirmed", batch.confirmed], ["In Inventory", batch.added], ["Ignored", batch.ignored] ] as const).map(([label, count]) =>
           <div key={label}><dt className="text-xs text-[var(--app-muted)]">{label}</dt><dd className="font-semibold tabular-nums">{format(count)}</dd></div>)}</dl>
-        {!batch.cancelled && !batch.trashed && batch.pending && <p className="text-sm">{format(batch.captured - batch.confirmed)} {batch.captured - batch.confirmed === 1 ? "match needs" : "matches need"} confirmation · {format(batch.confirmed - batch.added)} confirmed {batch.confirmed - batch.added === 1 ? "card awaits" : "cards await"} Inventory addition{batch.failed ? ` · ${format(batch.failed)} ${batch.failed === 1 ? "card needs" : "cards need"} processing attention` : ""}</p>}
+        {!batch.cancelled && !batch.trashed && batch.pending && <p className="text-sm">{format(batch.captured - batch.ignored - batch.confirmed)} {batch.captured - batch.ignored - batch.confirmed === 1 ? "match needs" : "matches need"} confirmation · {format(batch.confirmed - batch.added)} confirmed {batch.confirmed - batch.added === 1 ? "card awaits" : "cards await"} Inventory addition{batch.failed ? ` · ${format(batch.failed)} ${batch.failed === 1 ? "card needs" : "cards need"} processing attention` : ""}</p>}
         {batch.trashExpiresAt && batch.trashed && <p className="text-sm">Restore before {new Date(batch.trashExpiresAt).toLocaleString("en-US", {timeZone: "America/Chicago"})}.</p>}
         <div className="flex flex-wrap items-start gap-3">{!batch.trashed && <a href={`/imports/scan?batch=${encodeURIComponent(batch.id)}`} className={button}>{batch.cancelled ? "View saved cards" : "Open batch"}</a>}
           <AcquisitionBatchActions id={batch.id} batchNumber={batch.batchNumber} cancelled={batch.cancelled} trashed={batch.trashed} draining={batch.draining} /></div>

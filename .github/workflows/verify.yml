@@ -147,6 +147,8 @@ jobs:
       - run: npx prisma migrate deploy
       - name: Durable recognition rerun ownership, concurrency and conservation
         run: npx tsx scripts/verify-acquisition-rerun.ts --run
+      - name: Recoverable ignored scans, stale review/commit and worker conservation
+        run: npx tsx scripts/verify-acquisition-ignore.ts --run
       - name: Retain the pinned original hydration ordering failure
         run: |
           mkdir -p .local-data/acquisition-order

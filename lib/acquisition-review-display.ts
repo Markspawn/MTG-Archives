@@ -7,9 +7,10 @@ export const acquisitionReviewProblemLabels = {
   overflow: "Outside batch allocation",
 } as const;
 export type AcquisitionReviewProblem = keyof typeof acquisitionReviewProblemLabels;
-export type AcquisitionReviewFilter = "all" | "awaiting" | "ready" | "added" | AcquisitionReviewProblem;
+export type AcquisitionReviewFilter = "all" | "awaiting" | "ready" | "added" | "ignored" | AcquisitionReviewProblem;
 type Slot = {
   committed: boolean;
+  ignored?: boolean;
   reviewProblems?: readonly AcquisitionReviewProblem[];
   physicalReadiness?: { reasons: string[] };
   review: {
@@ -22,12 +23,14 @@ type Slot = {
 
 export function acquisitionSlotReviewState(slot: Slot, hasDraft = false) {
   if (slot.committed) return "added";
+  if (slot.ignored) return "ignored";
   if (hasDraft) return "awaiting";
   return acquisitionReviewComplete(slot) && slot.physicalReadiness?.reasons.length === 0
     ? "ready" : "awaiting";
 }
 
 export function acquisitionReviewComplete(slot: Slot) {
+  if (slot.ignored) return false;
   const review = slot.review;
   return Boolean(review?.cardId &&
     review.finish !== "UNKNOWN" &&
@@ -36,6 +39,7 @@ export function acquisitionReviewComplete(slot: Slot) {
 }
 
 export function acquisitionSlotBlockedReason(slot: Slot): string {
+  if (slot.ignored) return "This scan is ignored. Restore it before continuing.";
   if (!acquisitionReviewComplete(slot))
     return "Complete the printing, finish, condition and language before continuing.";
   const reasons = slot.physicalReadiness?.reasons;
@@ -51,12 +55,14 @@ export function acquisitionSlotBlockedReason(slot: Slot): string {
 }
 
 export function acquisitionReviewCounts<T extends Slot>(slots: T[], hasDraft: (slot: T) => boolean = () => false) {
-  const counts = { all: slots.length, awaiting: 0, ready: 0, added: 0 };
+  const counts = { all: slots.filter(slot => !slot.ignored).length, scanned: slots.length, ignored: 0, awaiting: 0, ready: 0, added: 0 };
   for (const slot of slots) counts[acquisitionSlotReviewState(slot, hasDraft(slot))]++;
   return counts;
 }
 
 export function acquisitionSlotMatchesReviewFilter(slot: Slot, filter: AcquisitionReviewFilter, hasDraft = false) {
+  if (filter === "ignored") return Boolean(slot.ignored);
+  if (slot.ignored) return false;
   if (filter === "all") return true;
   if (["awaiting", "ready", "added"].includes(filter))
     return acquisitionSlotReviewState(slot, hasDraft) === filter;
@@ -67,7 +73,7 @@ export function acquisitionReviewProblemCounts<T extends Slot>(slots: T[]) {
   const counts: Record<AcquisitionReviewProblem, number> = {
     conflict: 0, "no-match": 0, "unknown-finish": 0, quality: 0, overflow: 0,
   };
-  for (const slot of slots) if (!slot.committed)
+  for (const slot of slots) if (!slot.committed && !slot.ignored)
     for (const problem of new Set(slot.reviewProblems ?? []))
       if (Object.hasOwn(counts, problem)) counts[problem]++;
   return counts;
@@ -79,7 +85,7 @@ export function nextAwaitingAcquisitionSlot<T extends Slot & {
   position: number; photos: { ready: boolean; purgedAt: unknown }[];
 }>(slots: T[], after: number, hasDraft: (slot: T) => boolean = () => false): T | null {
   const awaiting = slots.filter(slot => slot.position !== after &&
-    !slot.committed && (hasDraft(slot) || !acquisitionReviewComplete(slot)) &&
+    !slot.committed && !slot.ignored && (hasDraft(slot) || !acquisitionReviewComplete(slot)) &&
     slot.photos.some(photo => photo.ready && !photo.purgedAt))
     .sort((a, b) => a.position - b.position);
   return awaiting.find(slot => slot.position > after) ?? awaiting[0] ?? null;

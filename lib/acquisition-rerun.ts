@@ -67,7 +67,7 @@ function eligible(request: AcquisitionRecognitionRerun) {
   return Prisma.sql`s."trashedAt" IS NULL AND s."deletedAt" IS NULL AND s."cancelledAt" IS NULL
     AND s.phase NOT IN ('DRAFT','CANCELLED') AND p.active AND u."isActive" AND NOT u."forcePasswordChange"
     AND (${request.scope === "ALL"} OR s."ownerPlayerId"=${request.ownerPlayerId})
-    AND NOT c.excluded AND (c.review IS NULL OR c.review='null'::jsonb)
+    AND NOT c.excluded AND NOT c.ignored AND (c.review IS NULL OR c.review='null'::jsonb)
     AND NOT EXISTS (SELECT 1 FROM "AcquisitionCommitMember" m WHERE m."candidateId"=c.id)
     AND photo.ready AND photo."purgedAt" IS NULL AND photo.generation=slot.generation
     AND photo."createdAt"<=${request.createdAt}

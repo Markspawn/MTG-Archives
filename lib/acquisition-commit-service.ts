@@ -69,7 +69,7 @@ async function prepare(
   const chosen = photos
     .map((photo) => {
       const candidate = candidateBySlot.get(photo.slotId);
-      if (!candidate || candidate.receipt)
+      if (!candidate || candidate.receipt || candidate.ignored)
         throw new Error("Capture card is already committed or unavailable");
       if (
         !photo.ready ||
@@ -218,7 +218,7 @@ export async function previewConfirmedAcquisitionCommit(db: PrismaClient, actor:
   for (let page=0; ; page++) {
     const progress = await getAcquisitionProgress(db,actor,sessionId,page);
     for (const slot of progress.slots) {
-      if (slot.committed || !slot.review) continue;
+      if (slot.committed || slot.ignored || !slot.review) continue;
       const photo = slot.photos.find(photo => photo.ready && !photo.purgedAt && photo.generation===slot.generation);
       if (slot.photos.some(photo => excluded.has(photo.id))) addReason("Unsaved corrections");
       else if (acquisitionSlotReviewState(slot) !== "ready") addReason(acquisitionSlotBlockedReason(slot));

@@ -135,6 +135,7 @@ type Candidate = {
   uncertainty: z.infer<typeof uncertainty>[];
   revision: number;
   excluded: boolean;
+  ignored?: boolean;
   countConfirmed: boolean;
   proposal: ReviewAttributes | null;
   review: (ReviewAttributes & { actorId: string }) | null;
@@ -466,6 +467,7 @@ export function recordRecognitionProposal(
 ): CaptureSession {
   const { next, candidate } = editCandidate(session, key, revision);
   candidate.proposal = attributes.parse(proposal);
+  if (candidate.ignored) throw new Error("Unavailable candidate");
   // Recognition is evidence only; never overwrite the human review or count.
   return next;
 }
@@ -479,13 +481,14 @@ export function reviewCandidate(
   id.parse(actorId);
   const { next, candidate } = editCandidate(session, key, revision);
   candidate.review = { ...attributes.parse(decision), actorId };
+  if (candidate.ignored) throw new Error("Unavailable candidate");
   candidate.revision++;
   return next;
 }
 export function candidateCommitReadiness(session: CaptureSession, key: string) {
   const candidate = session.candidates.find((c) => c.key === key);
   const reasons: string[] = [];
-  if (!candidate || candidate.excluded) reasons.push("UNAVAILABLE");
+  if (!candidate || candidate.excluded || candidate.ignored) reasons.push("UNAVAILABLE");
   else {
     reasons.push(...countReasons(candidate));
     if (!captureSummary(session).allocated.includes(key))

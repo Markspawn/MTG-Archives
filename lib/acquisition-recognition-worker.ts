@@ -225,7 +225,7 @@ export async function enqueueReadyRecognition(
   });
   let added = 0;
   for (const job of ready) {
-    if (job.candidate.excluded) continue;
+    if (job.candidate.excluded || job.candidate.ignored) continue;
     const input = z
       .object({ photoId: z.string().uuid(), digest })
       .parse(job.input);
