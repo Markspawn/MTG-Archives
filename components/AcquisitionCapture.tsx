@@ -373,10 +373,10 @@ export function AcquisitionCapture({
         setUndoIgnored({photoId: photo.id, revision: result.revision, position: slot.position});
         const next = nextAwaitingAcquisitionSlot(progress?.slots ?? [], slot.position, hasDraft);
         setFocusedSlotId(next?.id ?? null);
-        setReviewNavigation(`Card ${slot.position + 1} ignored. Your scan and saved review are kept.`);
+        setReviewNavigation("");
       } else {
         setUndoIgnored(null);
-        setReviewNavigation(`Card ${slot.position + 1} restored with its saved review.`);
+        setReviewNavigation(`Card ${slot.position + 1} restored.`);
       }
       await refresh();
     } catch (error) {
@@ -1369,7 +1369,7 @@ export function AcquisitionCapture({
                 if (pending && slot) void changeIgnored(slot, pending.action, pending.revision);
               }}>Retry {pendingIgnore.current.action === "ignore" ? "Ignore" : "Restore"}</button>}
               {undoIgnored && <div className="flex flex-wrap items-center gap-2 text-sm" role="status">
-                Card {undoIgnored.position + 1} ignored.
+                Card {undoIgnored.position + 1} ignored. Scan and saved review kept.
                 <button type="button" className={button} disabled={ignoreBusy || busyReviews.size > 0}
                   onClick={() => { const slot = progress.slots.find(slot => slot.photos.some(photo => photo.id === undoIgnored.photoId));
                     if (slot) void changeIgnored(slot, "restore", undoIgnored.revision); }}>Undo</button>
@@ -1390,7 +1390,7 @@ export function AcquisitionCapture({
                       onChange={event => { const slot = filteredSlots.find(slot => slot.id === event.target.value); if (slot) revealCard(slot.position); }}>
                       {focusedSlot && focusedIndex < 0 && <option value={focusedSlot.id}>Card {focusedSlot.position + 1} · outside filter</option>}
                       {!focusedSlot && <option value="">No matching cards</option>}
-                      {filteredSlots.map(slot => <option key={slot.id} value={slot.id}>Card {slot.position + 1} · {hasDraft(slot) ? "Unsaved correction" : slot.committed ? "Added" : acquisitionSlotReviewState(slot) === "ready" ? "Confirmed" : "Pending"}</option>)}
+                      {filteredSlots.map(slot => <option key={slot.id} value={slot.id}>Card {slot.position + 1} · {slot.ignored ? "Ignored" : hasDraft(slot) ? "Unsaved correction" : slot.committed ? "Added" : acquisitionSlotReviewState(slot) === "ready" ? "Confirmed" : "Pending"}</option>)}
                     </select>
                   </label>
                 </div>

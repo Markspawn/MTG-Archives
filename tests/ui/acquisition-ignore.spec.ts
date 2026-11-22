@@ -53,8 +53,11 @@ test("Ignore, Undo and Restore preserve saved choices and scans across desktop/p
   await expect(page.getByTestId('scan-review-summary')).toContainText('2 ignored');
   await page.getByRole('combobox',{name:'Show cards',exact:true}).selectOption('ignored');await expect(first).toBeVisible();
   await expect(first.getByRole('img',{name:'Ignored scan 1',exact:true})).toBeVisible();
+  await expect(page.getByRole('combobox',{name:'Jump to card',exact:true})).toContainText('Card 1 · Ignored');
+  await first.scrollIntoViewIfNeeded();
   await page.screenshot({path:testInfo.outputPath('ignored-desktop.png')});
   await page.setViewportSize({width:390,height:844});await expect(first.getByRole('button',{name:'Restore scan',exact:true})).toBeVisible();
+  await first.scrollIntoViewIfNeeded();
   await page.screenshot({path:testInfo.outputPath('ignored-phone.png')});
   await first.getByRole('button',{name:'Restore scan',exact:true}).click();
   await expect(first).toBeHidden();await page.getByRole('combobox',{name:'Show cards',exact:true}).selectOption('all');
@@ -62,7 +65,7 @@ test("Ignore, Undo and Restore preserve saved choices and scans across desktop/p
   await expect.poll(()=>database<any>(`return p.acquisitionCandidate.findFirstOrThrow({where:{run:{sessionId:${JSON.stringify(batch)}},acquisitionOrder:0},select:{review:true,physicalId:true,countConfirmed:true}});`)).toEqual(reviewBefore);
   const after=snapshot();expect(after).toEqual(before);
   const bulk=page.getByRole('region',{name:'Bulk match review',exact:true});await bulk.getByRole('button',{name:'Bulk Confirm Match',exact:true}).click();
-  await expect(bulk.getByRole('button',{name:'Confirm 1 selected matches',exact:true})).toBeEnabled();
+  await expect(bulk.getByRole('button',{name:'Confirm 1 selected match',exact:true})).toBeEnabled();
   await expect(bulk.getByRole('checkbox',{name:`Card 2: ${card.name}`,exact:true})).toHaveCount(0);
   writeFileSync(testInfo.outputPath('conservation.json'),JSON.stringify({before,after,reviewBefore,conserved:true},null,2));
   database(`fs.writeFileSync('/tmp/ignore-ui-fixture.json',JSON.stringify({batch:${JSON.stringify(batch)},user:${JSON.stringify(tag)},photos:${JSON.stringify(photos)}}));return true;`);
