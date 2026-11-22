@@ -26,7 +26,7 @@ test("existing batch entries show exact state colors and refresh their whole-bat
   await page.goto('/imports/batches?view=all&q='+batch.batchNumber);
   const entry=page.getByRole('article',{name:'Batch '+batch.batchNumber,exact:true});
   const graphic=entry.getByRole('figure',{name:'Batch card states',exact:true});
-  const counts=()=>graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>Object.fromEntries(nodes.map(n=>[(n as HTMLElement).dataset.state,Number((n as HTMLElement).dataset.count)])));
+  const counts=():Promise<Record<string,number>>=>graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>Object.fromEntries(nodes.map(n=>[(n as HTMLElement).dataset.state!,Number((n as HTMLElement).dataset.count)])));
   await expect(graphic).toContainText('100 saved cards');
   expect(await counts()).toEqual({queued:20,evaluated:30,confirmed:25,inventory:23,ignored:2});
   const widths=await graphic.locator('[role="img"] [data-state]').evaluateAll(nodes=>nodes.map(n=>(n as HTMLElement).style.width));
