@@ -149,7 +149,7 @@ async function retainJobEvidence(tx: Tx, ownerPlayerId: string, photoId: string,
 // Atomic with each review save, after the ordinary source/revision/owner fences.
 // Callers supply no machine scores or labels: these are resolved from saved jobs.
 export async function captureCorrectionReview(tx: Tx, input: { ownerPlayerId: string; sessionId: string;
-  candidateId: string; revision: number; actorId: string; origin: "HUMAN" | "AUTO";
+  candidateId: string; revision: number; actorId: string; origin: "HUMAN" | "AUTO" | "ASSISTANT";
   photo: AcquisitionPhoto | null; before: unknown; after: unknown; tokens?: CorrectionDisplayTokens }) {
   const account = await ensureCorrectionAccount(tx, input.ownerPlayerId);
   const eventKey = { ownerPlayerId: input.ownerPlayerId, sourceCandidateId: input.candidateId, candidateRevision: input.revision };

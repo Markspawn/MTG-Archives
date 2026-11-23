@@ -38,6 +38,8 @@ Evidence abbreviations: **I** = InventoryBrowser, InventoryAdvancedSearch and in
 | `/public/wishlist/[username]` | Public browsing / member Wishlist | Owner-selected categories, none shared by default; public-safe names/quantities/printing-finish preferences only; same anonymous/signed-in boundary | public-wishlist projection/URL tests; disposable PostgreSQL and desktop/phone sharing checks |
 | `/public/decks` | Public browsing / decks | Read-only library, folders/tags/views; authorized shared deck tools | DeckWorkspace; public/private deck checks |
 | `/settings` | Account & settings / profile & preferences | Own identity/appearance/pricing/sharing/categories; explicit save | settings page; settings-themes |
+| `/settings/connections` | Account & settings / Connections | Own ChatGPT grants, setup and revocation; optional installation enablement | scan-connector policy, PostgreSQL and HTTPS browser controls |
+| `/settings/connections/authorize` | Account & settings / Connections / Consent | Signed-in OAuth consent; separate confirmation permission; all-user scope requires administrator and explicit Admin Mode | scan-connector policy, PostgreSQL and HTTPS browser controls |
 | `/settings/email` | Account & settings / Notifications / Email | Own address/preferences/test/history; global SMTP availability | email page; email-settings |
 | `/settings/webhooks` | Account & settings / Notifications / Webhooks | Own masked destinations; private-network choice restricted | webhook page; webhook-settings |
 | `/settings/pricing-alerts` | Account & settings / Pricing alerts | Signed-in user's opt-in and thresholds; owner link required before enabling | pricing alerts page; pricing-digest |

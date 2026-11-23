@@ -125,7 +125,8 @@ export type ReviewAttributes = {
   language: string | null;
   finish: "UNKNOWN" | "NONFOIL" | "FOIL" | "ETCHED";
   condition: string | null;
-  source?: "AUTO_STRONG_MATCH";
+  source?: "AUTO_STRONG_MATCH" | "CHATGPT_CONNECTOR";
+  connectorGrantId?: string;
   openerPlayerId?: string | null;
 };
 type Candidate = {

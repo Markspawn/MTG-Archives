@@ -8,6 +8,8 @@ import { acquisitionImageInputKindSchema, type AcquisitionImageInputKind } from 
 import {acquisitionConflictBackoff} from "./acquisition-upload";
 import { allocatedAcquisitionCandidates } from "./acquisition-allocation-store";
 import {acquisitionIgnoreTransition} from "./acquisition-ignore";
+import {connectorAccess} from "./scan-connector-auth";
+import {assertConnectorScan,assertConnectorReference} from "./scan-connector-evidence";
 import {lockInventoryDestinations} from "./inventory-capacity";
 import { ACQUISITION_REVIEW_PAGE, acquisitionReviewPage } from "./acquisition-continuation";
 import { isAdminUser } from "./auth-policy";
@@ -1433,9 +1435,13 @@ export async function saveAcquisitionReview(
   actor: AcquisitionActor,
   sessionId: string,
   raw: unknown,
+  options?: {connector: {accessToken:string;scanTicket:string;referenceTicket:string;reason:string}},
 ) {
   const input = acquisitionReviewRequestSchema.parse(raw);
   return transaction(db, async (tx) => {
+    const connector=options?.connector?await connectorAccess(tx,options.connector.accessToken,["scans:read","scans:confirm"],true):null;
+    if(connector&&(input.action!=="accept"||connector.actor.userId!==actor.userId||connector.actor.adminMode!==actor.adminMode))
+      throw new Error("Connector review permission unavailable");
     await read(tx, actor, sessionId, {});
     await tx.$queryRaw`SELECT id FROM "AcquisitionSession" WHERE id = ${sessionId} FOR UPDATE`;
     const photoId = "photoId" in input ? input.photoId : undefined;
@@ -1597,6 +1603,20 @@ export async function saveAcquisitionReview(
         "Capture card is already committed; use Inventory to change it",
       );
     const current = candidate.review as AcquisitionCardReview["review"];
+    if(connector&&options?.connector&&input.action==="accept"){
+      if(row.cancelledAt||row.trashedAt||row.deletedAt||row.phase==="CANCELLED")throw new Error("Capture batch is no longer open");
+      assertConnectorScan(connector.grant,options.connector.scanTicket,{kind:"scan",sessionId,photoId:photo.id,digest:photo.digest,generation:photo.generation,revision:input.revision});
+      const reference=await tx.card.findUnique({where:{id:input.decision.cardId},select:{id:true,imageUri:true}});
+      if(!reference)throw new Error("Choose an available paper printing");
+      assertConnectorReference(connector.grant,options.connector.referenceTicket,reference);
+      if(current&&!(current.source==="CHATGPT_CONNECTOR"&&current.connectorGrantId===connector.grant.id&&candidate.revision===input.revision+1))
+        throw new Error("This card already has a saved review; keep the existing choice");
+      const defaults=acquisitionDefaultsSchema.parse(row.reviewDefaults??emptyAcquisitionDefaults);
+      if(input.decision.finish!==defaults.finish||input.decision.condition!==defaults.condition||
+        (input.decision.openerPlayerId??null)!==(defaults.openerPlayerId??null))
+        throw new Error("Connector confirmation must preserve the visible batch finish, condition and opener defaults");
+      z.string().trim().min(10).max(2000).parse(options.connector.reason);
+    }
     if (input.action === "accept") input.decision = preserveAcquisitionReviewOpener(
       input.decision, candidate.review as AcquisitionCardReview["review"]);
     if (candidate.revision !== input.revision) {
@@ -1649,6 +1669,10 @@ export async function saveAcquisitionReview(
       pending.review = null;
       pending.revision++;
     }
+    if(connector&&input.action==="accept"){
+      const saved=after.candidates.find(c=>c.key===key)!;
+      saved.review={...saved.review!,source:"CHATGPT_CONNECTOR",connectorGrantId:connector.grant.id};
+    }
     await save(tx, row, before, after);
     await tx.acquisitionCommand.create({
       data: {
@@ -1659,13 +1683,15 @@ export async function saveAcquisitionReview(
           action: input.action,
           actorId: actor.userId,
           photoId: input.photoId,
+          ...(connector&&options?.connector?{source:"CHATGPT_CONNECTOR",connectorGrantId:connector.grant.id,
+            reason:options.connector.reason,sourceDigest:photo.digest,sourceGeneration:photo.generation}:{}),
           before: candidate.review,
           after: input.action === "accept" ? input.decision : null,
         }),
       },
     });
     await captureCorrectionReview(tx, { ownerPlayerId: row.ownerPlayerId, sessionId, photo,
-      candidateId: candidate.id, revision: input.revision + 1, actorId: actor.userId, origin: "HUMAN",
+      candidateId: candidate.id, revision: input.revision + 1, actorId: actor.userId, origin: connector?"ASSISTANT":"HUMAN",
       before: candidate.review, after: input.action === "accept" ? input.decision : null, tokens: input.evidenceTokens });
     return { replay: false };
   });

@@ -135,6 +135,7 @@ enum NotificationDeliveryAttemptStatus {
 }
 
 model User {
+  scanConnectorGrants          ScanConnectorGrant[]
   scannerAgents                ScannerAgent[]
   scannerPairings              ScannerPairing[]
   acquisitionSessions          AcquisitionSession[]
@@ -186,6 +187,42 @@ model User {
 
   @@index([isActive, inventoryDefaultVisibility])
   @@index([isActive, deckDefaultVisibility])
+}
+
+model ScanConnectorGrant {
+  id          String @id @default(uuid())
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes      String[]
+  securityKey String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  codes       ScanConnectorCode[]
+  tokens      ScanConnectorToken[]
+  @@index([userId, createdAt])
+}
+
+model ScanConnectorCode {
+  hash        String @id
+  grantId     String
+  grant       ScanConnectorGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  redirectUri String
+  challenge   String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  @@index([grantId])
+}
+
+model ScanConnectorToken {
+  hash        String @id
+  scopes      String[]
+  refreshHash String @unique
+  grantId     String
+  grant       ScanConnectorGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  rotatedAt   DateTime?
+  @@index([grantId])
 }
 
 model ScannerPairing {

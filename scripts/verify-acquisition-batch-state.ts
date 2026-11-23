@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
+import {basename} from "node:path";
 import {PrismaClient} from "@prisma/client";
 import {createAcquisitionSession, executeAcquisitionCommand, saveAcquisitionReview} from "../lib/acquisition-store";
 import {getAcquisitionBatchDashboard} from "../lib/acquisition-batch-dashboard";
@@ -113,7 +114,7 @@ export async function verifyBatchStateInfographic(db: PrismaClient) {
   }
 }
 
-if(process.argv.includes("--run")) {
+if(basename(process.argv[1]??"")==="verify-acquisition-batch-state.ts"&&process.argv.includes("--run")) {
   const url=new URL(process.env.DATABASE_URL||"http://invalid");
   if(process.env.MTG_LOCAL_PILOT_TEST!=="1" || !["localhost","127.0.0.1","[::1]","mtg-batch-state-db"].includes(url.hostname) || !url.pathname.startsWith("/acquisition_"))
     throw new Error("Requires opt-in and a fresh disposable local acquisition_* database");

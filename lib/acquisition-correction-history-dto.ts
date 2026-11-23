@@ -7,7 +7,7 @@ const kinds: Record<string, string> = {
   SEARCHED_PRINTING_SELECTED: "Selected a printing found by search", NO_SUGGESTION_RESOLVED: "Saved a printing without suggestions",
   LABEL_REVISED: "Changed a saved printing", METADATA_ONLY: "Updated attributes of the same printing",
   RETURNED_TO_PENDING: "Returned the scan to pending", DISPLAY_IDENTITY_UNKNOWN: "Saved without a recorded suggestion",
-  AUTOMATIC_SELECTION: "Automatic selection", LIBRARY_REMOVED: "Example removed",
+  AUTOMATIC_SELECTION: "Automatic selection", ASSISTANT_SELECTION: "AI review", LIBRARY_REMOVED: "Example removed",
 };
 const gaps: Record<string, string> = {
   SOURCE_ORIGINAL_UNAVAILABLE: "The source original was unavailable at the save.",
@@ -52,7 +52,7 @@ export function correctionHistoryEntry(event: { id: string; candidateRevision: n
   if (!supported) evidenceGaps.unshift("This saved record uses an unavailable evidence format.");
   return {
     id: event.id, revision: event.candidateRevision, savedAt: event.createdAt.toISOString(),
-    origin: event.origin === "HUMAN" ? "Human review" : event.origin === "AUTO" ? "Automatic selection" : "Review origin not recorded",
+    origin: event.origin === "HUMAN" ? "Human review" : event.origin === "AUTO" ? "Automatic selection" : event.origin === "ASSISTANT" ? "ChatGPT review" : "Review origin not recorded",
     kind: Object.hasOwn(kinds, event.classification) ? kinds[event.classification] : "Review kind not recorded",
     before: decision(payload, "before", projections), after: decision(payload, "after", projections),
     suggestion: { state: suggestionState, printing: suggested },
