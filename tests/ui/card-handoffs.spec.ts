@@ -296,6 +296,7 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     .click();
   await page.getByRole("button", { name: "View details", exact: true }).click();
   await page
+    .getByRole("dialog", { name: f.cardName, exact: true })
     .getByRole("button", { name: "Give / trade away", exact: true })
     .click();
   dialog = page.getByRole("dialog", { name: "Give / trade away", exact: true });
