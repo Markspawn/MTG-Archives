@@ -276,6 +276,10 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   expect(await page.content()).not.toContain("Preserved lot note");
   expect(await page.content()).not.toContain("Handoff box");
   await page.setViewportSize({ width: 390, height: 900 });
+  const phoneSearch = await page.getByRole("searchbox", {
+    name: "Search cards or people", exact: true,
+  }).boundingBox();
+  expect(phoneSearch?.width).toBeGreaterThanOrEqual(250);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

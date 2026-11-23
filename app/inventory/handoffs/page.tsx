@@ -88,7 +88,7 @@ export default async function HandoffHistory({
         Archive recipients receive their copies immediately in Unassigned. These
         records stay here after cards leave your collection.
       </p>
-      <form className="flex flex-wrap items-end gap-3 rounded border border-[var(--app-border)] p-4">
+      <form className="flex flex-col items-stretch gap-3 rounded border border-[var(--app-border)] p-4 sm:flex-row sm:flex-wrap sm:items-end">
         {admin && (
           <label className="min-w-0">
             Inventory owner
@@ -123,7 +123,7 @@ export default async function HandoffHistory({
           <select
             name="direction"
             defaultValue={history.direction}
-            className="mt-1 block rounded border bg-[var(--app-control)] p-2"
+            className="mt-1 block w-full rounded border bg-[var(--app-control)] p-2 sm:w-auto"
           >
             <option value="given">Given / traded away</option>
             <option value="received">Received</option>
