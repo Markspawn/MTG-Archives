@@ -163,6 +163,7 @@ model User {
   createdAt                    DateTime                            @default(now())
   updatedAt                    DateTime                            @updatedAt
   inventoryAuditLogs           InventoryAuditLog[]
+  cardHandoffs                  CardHandoff[]
   importBatches                ImportBatch[]
   importResolutionJobs         ImportResolutionJob[]
   createdTrades                Trade[]                             @relation("TradeCreatedBy")
@@ -353,6 +354,8 @@ model Player {
   inventoryOwned              InventoryItem[]                     @relation("InventoryCurrentOwner")
   inventoryOpened             InventoryItem[]                     @relation("InventoryOriginalOpener")
   inventoryLocations          InventoryLocation[]
+  cardHandoffsSent             CardHandoff[]                       @relation("CardHandoffSender")
+  cardHandoffsReceived         CardHandoff[]                       @relation("CardHandoffRecipient")
   tradeWishlistTargets        TradeWishlistItem[]                 @relation("TradeWishlistTargetOwner")
   importBatchesSelected       ImportBatch[]                       @relation("ImportBatchSelectedPlayer")
   importBatchesOriginalOpened ImportBatch[]                       @relation("ImportBatchOriginalOpener")
@@ -987,6 +990,34 @@ model InventoryItem {
   @@index([locationId, locationSection])
   @@index([cardId, quantity])
   @@index([foilStatus, condition, language])
+}
+
+// An immutable handoff receipt survives later removal of either inventory lot.
+model CardHandoff {
+  id                      String   @id @default(cuid())
+  actorUserId             String
+  actorUser               User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  requestId               String
+  requestHash             String
+  fromPlayerId            String
+  fromPlayer              Player   @relation("CardHandoffSender", fields: [fromPlayerId], references: [id], onDelete: Restrict)
+  toPlayerId              String?
+  toPlayer                Player?  @relation("CardHandoffRecipient", fields: [toPlayerId], references: [id], onDelete: Restrict)
+  senderName              String
+  recipientName           String
+  kind                    String
+  cardId                  String
+  cardName                String
+  quantity                Int
+  sourceInventoryItemId   String
+  receivedInventoryItemId String?
+  snapshot                Json
+  createdAt               DateTime @default(now())
+
+  @@unique([actorUserId, requestId])
+  @@index([fromPlayerId, createdAt, id])
+  @@index([toPlayerId, createdAt, id])
+  @@index([fromPlayerId, cardId, createdAt])
 }
 
 model InventoryAuditLog {

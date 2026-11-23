@@ -1186,6 +1186,7 @@ export default async function InventoryPage({
               .toLocaleString()}{" "}
             physical copies
           </p>
+          {user&&<a href="/inventory/handoffs" className="inline-block text-sm underline">Gifts and traded-away history</a>}
           {totalMatchingCount === 0 ? (
             <div role="status" className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-5 text-sm">
               <h2 className="font-semibold">
@@ -1222,6 +1223,7 @@ export default async function InventoryPage({
             cardLabels={cardLabels}
             isAdmin={adminModeActive}
             huntOwnerId={user?.playerId ?? undefined}
+            handoffActorUserId={user?.id}
             displayMode={displayMode}
             totalMatchingCount={totalMatchingCount}
             totalMatchingCards={filteredPrintingGroups.reduce(

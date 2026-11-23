@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { CardHunt } from "./CardHunt";
+import { CardHandoffDialog } from "./CardHandoffDialog";
 import { INVENTORY_SORT_FIELDS } from "@/lib/inventory-sort";
 import { inventorySortHref } from "./inventorySortNavigation";
 import { StorageDestinationPicker } from "./StorageDestinationPicker";
@@ -1182,6 +1183,7 @@ function CardDetail({
   onEdit,
   onAudit,
   onDelete,
+  onGive,
   canHunt,
 }: {
   row: InventoryRow;
@@ -1194,6 +1196,7 @@ function CardDetail({
   onEdit?: () => void;
   onAudit?: () => void;
   onDelete?: () => Promise<void>;
+  onGive?: () => void;
   canHunt: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -1456,6 +1459,7 @@ function CardDetail({
               </div>
             </details>
           ) : null}
+          {onGive ? <button type="button" onClick={onGive} className={cn(filterPrimaryButtonClass,"px-2 py-1")}>Give / trade away</button> : null}
           {capabilities.canEdit && onEdit ? (
             <button
               onClick={onEdit}
@@ -1687,6 +1691,7 @@ export function InventoryBrowser({
   onAddToDeck,
   importExportHref,
   huntOwnerId,
+  handoffActorUserId,
 }: {
   rows: InventoryRow[];
   storageLocations?: StorageLocation[];
@@ -1751,6 +1756,7 @@ export function InventoryBrowser({
   onAddToDeck?: (formData: FormData) => Promise<void>;
   importExportHref?: string;
   huntOwnerId?: string;
+  handoffActorUserId?: string;
 }) {
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>(
@@ -1759,6 +1765,16 @@ export function InventoryBrowser({
       : [],
   );
   const [selected, setSelected] = useState<InventoryRow | null>(null);
+  const [handoffRow,setHandoffRow]=useState<InventoryRow|null>(null);
+  const [handoffMessage,setHandoffMessage]=useState("");
+  const [resumeHandoff,setResumeHandoff]=useState(false);
+  const [pendingHandoff,setPendingHandoff]=useState(false);
+  useEffect(()=>{
+    if(!handoffActorUserId)return;
+    const check=()=>{try{setPendingHandoff(Boolean(sessionStorage.getItem("mtg-card-handoff:"+handoffActorUserId)));}catch{setPendingHandoff(false);}};
+    check();window.addEventListener("mtg-card-handoff-pending",check);
+    return()=>window.removeEventListener("mtg-card-handoff-pending",check);
+  },[handoffActorUserId]);
   const [editing, setEditing] = useState<InventoryRow | null>(null);
   const [auditRow, setAuditRow] = useState<InventoryRow | null>(null);
   const auditRequest = useRef(0);
@@ -2522,6 +2538,7 @@ export function InventoryBrowser({
                           Edit inventory
                         </button>
                       ) : null}
+                      {capabilities.canMove ? <button type="button" className="w-full rounded px-2 py-1 text-left text-xs hover:bg-zinc-900" onClick={()=>setHandoffRow(row.original)}>Give / trade away</button> : null}
                       {capabilities.canDelete ? (
                         <button
                           type="button"
@@ -2553,6 +2570,7 @@ export function InventoryBrowser({
     [
       capabilities.canDelete,
       capabilities.canEdit,
+      capabilities.canMove,
       capabilities.canViewPrivateSourceInfo,
       capabilities.canViewVisibility,
       canShowPublicOwnerIdentity,
@@ -2632,6 +2650,7 @@ export function InventoryBrowser({
           {message}
         </div>
       ) : null}
+      {handoffActorUserId&&pendingHandoff&&!handoffRow&&!resumeHandoff&&<div role="status" className="rounded border border-amber-600 p-3"><p>An earlier handoff needs verification before you give more cards.</p><button type="button" className={cn(filterButtonClass,"mt-2")} onClick={()=>setResumeHandoff(true)}>Check pending handoff</button></div>}
       {isAdmin ? (
         <div className="border border-sky-800 bg-sky-950/40 text-sky-200 p-2 text-sm">
           Admin edit mode is active. Use the Actions column in Table View, or
@@ -3536,6 +3555,9 @@ export function InventoryBrowser({
         </div>
       )}
 
+      {handoffMessage&&<div role="status" className="fixed bottom-4 right-4 z-[80] max-w-[calc(100%-2rem)] rounded border border-emerald-600 bg-[var(--app-surface)] p-4 shadow-xl sm:max-w-md"><p>{handoffMessage}</p><div className="mt-2 flex gap-4"><a href="/inventory/handoffs" className="underline">View history</a><button type="button" onClick={()=>setHandoffMessage("")}>Dismiss</button></div></div>}
+      {handoffRow&&<CardHandoffDialog itemIds={getRowSourceIds(handoffRow)} cardName={handoffRow.cardName} onClose={()=>setHandoffRow(null)} onSuccess={message=>{setHandoffRow(null);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
+      {resumeHandoff&&<CardHandoffDialog itemIds={[]} cardName="Pending handoff" onClose={()=>setResumeHandoff(false)} onSuccess={message=>{setResumeHandoff(false);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
       {selected ? (
         <CardDetail
           key={selected.id}
@@ -3547,6 +3569,7 @@ export function InventoryBrowser({
           deckTargets={deckTargets}
           onAddToDeck={onAddToDeck}
           canHunt={huntOwnerId === selected.currentOwnerId}
+          onGive={capabilities.canMove&&selected.displayMode==="exact"?()=>{setHandoffRow(selected);setSelected(null);}:undefined}
           onEdit={
             capabilities.canEdit && selected.displayMode === "exact"
               ? () => {
