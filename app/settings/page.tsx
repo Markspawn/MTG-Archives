@@ -208,6 +208,7 @@ export default async function SettingsPage({
             Account
           </p>
           <h1 className="text-2xl font-bold">Settings</h1>
+          <a href="/settings/connections" className="underline text-sm">Connections · ChatGPT scan review</a>
           <p className="app-muted text-sm">
             Personalize the workspace, notifications, and public collection.
           </p>

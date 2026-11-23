@@ -121,7 +121,8 @@ export type AcquisitionCardReview = {
   review:
     | (z.infer<typeof acquisitionReviewDecisionSchema> & {
         actorId: string;
-        source?: "AUTO_STRONG_MATCH";
+        source?: "AUTO_STRONG_MATCH" | "CHATGPT_CONNECTOR";
+        connectorGrantId?: string;
       })
     | null;
   printing: AcquisitionPrinting | null;
