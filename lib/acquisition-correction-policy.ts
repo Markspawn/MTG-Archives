@@ -90,9 +90,10 @@ export function correctionJobSnapshot(job: { id: string; stage: string; versionK
 }
 
 export function classifyCorrection(input: { afterId: string | null; beforeId: string | null;
-  offeredIds: string[]; displayKnown: boolean; origin: "HUMAN" | "AUTO" }) {
+  offeredIds: string[]; displayKnown: boolean; origin: "HUMAN" | "AUTO" | "ASSISTANT" }) {
   if (!input.afterId) return "RETURNED_TO_PENDING";
   if (input.origin === "AUTO") return "AUTOMATIC_SELECTION";
+  if (input.origin === "ASSISTANT") return "ASSISTANT_SELECTION";
   if (input.beforeId === input.afterId) return "METADATA_ONLY";
   if (input.beforeId && input.beforeId !== input.afterId) return "LABEL_REVISED";
   if (!input.displayKnown) return "DISPLAY_IDENTITY_UNKNOWN";

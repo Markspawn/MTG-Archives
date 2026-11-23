@@ -31,6 +31,15 @@ function pathStartsWith(pathname: string, prefixes: string[]) {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const protectConsent = (response: NextResponse) => {
+    if (pathname === "/settings/connections/authorize") {
+      response.headers.set("X-Frame-Options", "DENY");
+      response.headers.set("Content-Security-Policy", "frame-ancestors 'none'");
+      response.headers.set("Referrer-Policy", "no-referrer");
+      response.headers.set("Cache-Control", "no-store");
+    }
+    return response;
+  };
 
   if (pathStartsWith(pathname, PUBLIC_PREFIXES)) {
     return NextResponse.next();
@@ -47,10 +56,10 @@ export function middleware(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
-    return NextResponse.redirect(loginUrl);
+    return protectConsent(NextResponse.redirect(loginUrl));
   }
 
-  return NextResponse.next();
+  return protectConsent(NextResponse.next());
 }
 
 export const config = {
