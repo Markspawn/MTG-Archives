@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const actor = await handoffActor(request),
       input = z
         .object({
-          itemIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
+          itemIds: z.array(z.string().min(1).max(200)).max(1000),
         })
         .strict()
         .parse(await handoffJson(request, 262144));

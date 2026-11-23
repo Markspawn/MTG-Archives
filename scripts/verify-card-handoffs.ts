@@ -6,6 +6,7 @@ import {
   getHandoffOptions,
   getHandoffHistory,
   giveInventoryCard,
+  HandoffError,
 } from "../lib/card-handoffs";
 import { handoffStamp, type HandoffInput } from "../lib/card-handoff-policy";
 
@@ -208,6 +209,16 @@ export async function verifyCardHandoffs(db: PrismaClient) {
     assert.equal(given.internal, false);
     assert.equal(await quantity(f.sourceId), 8);
     assert.equal(await stock(), initial - 2);
+    const resumeContext = await getHandoffOptions(db, actor, []);
+    assert.equal(resumeContext.actorUserId, owner);
+    assert.equal(resumeContext.lots.length, 0);
+    await db.user.update({ where: { id: owner }, data: { isActive: false } });
+    await assert.rejects(
+      giveInventoryCard(db, actor, outside),
+      (error) => error instanceof HandoffError && !error.outcomeKnown,
+    );
+    await db.user.update({ where: { id: owner }, data: { isActive: true } });
+    assert.equal((await giveInventoryCard(db, actor, outside)).replay, true);
     const replay = await Promise.all([
       giveInventoryCard(db, actor, outside),
       giveInventoryCard(db, actor, outside),

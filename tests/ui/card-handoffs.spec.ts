@@ -45,20 +45,20 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   const tag = "handoff-ui-" + randomUUID(),
     password = randomUUID();
   const f = database<any>(
-    `const f=await require('./scripts/verify-card-handoffs.ts').seedCardHandoffFixture(p,${JSON.stringify(tag)});const hash=await require('bcryptjs').hash(${JSON.stringify(password)},10);await p.user.updateMany({where:{id:{in:f.ids}},data:{passwordHash:hash}});await p.inventoryItem.deleteMany({where:{id:{in:[f.singleId,f.duplicateId,f.deckId]}}});const svg='<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><rect width="300" height="420" rx="16" fill="#133b2e"/><rect x="18" y="18" width="264" height="384" rx="8" fill="#d8bd87"/><text x="32" y="55" font-size="22">Handoff test card</text><rect x="32" y="75" width="236" height="160" fill="#54806e"/><text x="32" y="365" font-size="20">TST 7</text></svg>';await p.card.update({where:{id:f.cardId},data:{imageUri:'data:image/svg+xml;base64,'+Buffer.from(svg).toString('base64')}});fs.writeFileSync('/tmp/handoff-ui-fixture.json',JSON.stringify(f));return f;`,
+    `if(await p.user.count())throw Error('Fresh synthetic review required');const f=await require('./scripts/verify-card-handoffs.ts').seedCardHandoffFixture(p,${JSON.stringify(tag)});const hash=await require('bcryptjs').hash(${JSON.stringify(password)},10);await p.user.updateMany({where:{id:{in:f.ids}},data:{passwordHash:hash}});await p.inventoryItem.deleteMany({where:{id:{in:[f.duplicateId,f.deckId]}}});const svg='<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><rect width="300" height="420" rx="16" fill="#133b2e"/><rect x="18" y="18" width="264" height="384" rx="8" fill="#d8bd87"/><text x="32" y="55" font-size="22">Handoff test card</text><rect x="32" y="75" width="236" height="160" fill="#54806e"/><text x="32" y="365" font-size="20">TST 7</text></svg>';await p.card.update({where:{id:f.cardId},data:{imageUri:'data:image/svg+xml;base64,'+Buffer.from(svg).toString('base64')}});const image=(await p.card.findUniqueOrThrow({where:{id:f.cardId}})).imageUri;const last=await p.card.create({data:{name:'Last copy '+f.tag,scryfallId:require('crypto').randomUUID(),setCode:'tst',collectorNumber:'8',typeLine:'Creature',rarity:'common',imageUri:image}});f.lastCardId=last.id;f.lastName=last.name;await p.inventoryItem.update({where:{id:f.singleId},data:{cardId:last.id}});fs.writeFileSync('/tmp/handoff-ui-fixture.json',JSON.stringify(f));return f;`,
   );
   const inventory =
     "/inventory?displayMode=exact&cardName=" + encodeURIComponent(f.cardName);
   const original = database<any>(
     `return{source:await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.sourceId)}}}),foreign:await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.foreignId)}}}),card:await p.card.findUniqueOrThrow({where:{id:${JSON.stringify(f.cardId)}}}),quantity:(await p.inventoryItem.aggregate({_sum:{quantity:true}}))._sum.quantity};`,
   );
-  expect(original.quantity).toBe(19);
+  expect(original.quantity).toBe(20);
   await login(page, f.ids[0], password);
   await page.goto(inventory);
   await page.getByRole("button", { name: "Table View", exact: true }).click();
-  const open = async () => {
+  const open = async (cardName = f.cardName) => {
     await page
-      .getByLabel("Actions for " + f.cardName, { exact: true })
+      .getByLabel("Actions for " + cardName, { exact: true })
       .first()
       .click();
     await page
@@ -100,12 +100,21 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
   let firstRequest: string | undefined,
     receiptId: string | undefined,
-    attempts = 0;
+    attempts = 0,
+    deniedRetries = 0;
   await page.route("**/api/inventory/handoffs", async (route) => {
     const request = route.request().postDataJSON();
     if (!firstRequest) firstRequest = request.requestId;
     expect(request.requestId).toBe(firstRequest);
     const response = await route.fetch();
+    if (response.status() === 401) {
+      deniedRetries++;
+      const error = await response.json();
+      expect(error.definite).toBe(true);
+      expect(error.outcomeKnown).toBe(false);
+      await route.fulfill({ response });
+      return;
+    }
     expect(response.status()).toBe(200);
     const result = await response.json();
     if (++attempts === 1) {
@@ -117,7 +126,10 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
       await route.fulfill({ response });
     }
   });
-  dialog = await open();
+  const lastInventory =
+    "/inventory?displayMode=exact&cardName=" + encodeURIComponent(f.lastName);
+  await page.goto(lastInventory);
+  dialog = await open(f.lastName);
   await dialog.getByLabel("Recipient name", { exact: true }).fill("Lee");
   await dialog.getByLabel("Record as", { exact: true }).selectOption("TRADE");
   await dialog
@@ -131,12 +143,41 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   ).toBeVisible();
   expect(
     database<number>(
-      `return(await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.sourceId)}}})).quantity;`,
+      `return(await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.singleId)}}})).quantity;`,
     ),
-  ).toBe(7);
+  ).toBe(0);
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.reload();
-  dialog = await open();
+  await expect(
+    page.getByLabel("Actions for " + f.lastName, { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Check pending handoff", exact: true })
+    .click();
+  dialog = page.getByRole("dialog", { name: "Give / trade away", exact: true });
+  await expect(
+    dialog.getByText(/Verify the previous confirmation/),
+  ).toContainText("Lee");
+  database(
+    `return await p.authSession.deleteMany({where:{userId:${JSON.stringify(f.ids[0])}}});`,
+  );
+  await dialog
+    .getByRole("button", { name: "Retry same confirmation", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText("Sign in");
+  await expect(
+    dialog.getByRole("button", {
+      name: "Retry same confirmation",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await login(page, f.ids[0], password);
+  await page.goto(lastInventory);
+  await page
+    .getByRole("button", { name: "Check pending handoff", exact: true })
+    .click();
+  dialog = page.getByRole("dialog", { name: "Give / trade away", exact: true });
   await expect(
     dialog.getByText(/Verify the previous confirmation/),
   ).toContainText("Lee");
@@ -145,6 +186,7 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     .click();
   await expect(dialog).toHaveCount(0);
   expect(attempts).toBe(2);
+  expect(deniedRetries).toBe(1);
   await page.unroute("**/api/inventory/handoffs");
   expect(
     database<number>(
@@ -152,6 +194,7 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     ),
   ).toBe(1);
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await page.goto(inventory);
   dialog = await open();
   await dialog
     .getByRole("radio", { name: "Archive user", exact: true })
@@ -200,8 +243,8 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   const result = database<any>(
     `const records=await p.cardHandoff.findMany({where:{fromPlayerId:${JSON.stringify(f.ids[0])}},orderBy:{createdAt:'asc'}});const receipt=records.find(x=>x.toPlayerId);return{source:await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.sourceId)}}}),foreign:await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.foreignId)}}}),card:await p.card.findUniqueOrThrow({where:{id:${JSON.stringify(f.cardId)}}}),received:await p.inventoryItem.findUniqueOrThrow({where:{id:receipt.receivedInventoryItemId},include:{location:true}}),quantity:(await p.inventoryItem.aggregate({_sum:{quantity:true}}))._sum.quantity,records:records.map(r=>({id:r.id,quantity:r.quantity,kind:r.kind,actor:r.actorUserId,to:r.toPlayerId,recipient:r.recipientName}))};`,
   );
-  expect(result.source.quantity).toBe(4);
-  expect(result.quantity).toBe(16);
+  expect(result.source.quantity).toBe(5);
+  expect(result.quantity).toBe(17);
   expect(result.foreign).toEqual(original.foreign);
   expect(result.card).toEqual(original.card);
   expect(result.received.quantity).toBe(3);
@@ -279,22 +322,24 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   const final = database<any>(
     `return{quantity:(await p.inventoryItem.aggregate({_sum:{quantity:true}}))._sum.quantity,receipts:await p.cardHandoff.count(),source:(await p.inventoryItem.findUniqueOrThrow({where:{id:${JSON.stringify(f.sourceId)}}})).quantity};`,
   );
-  expect(final).toEqual({ quantity: 16, receipts: 3, source: 4 });
+  expect(final).toEqual({ quantity: 17, receipts: 3, source: 5 });
   writeFileSync(
     testInfo.outputPath("conservation.json"),
     JSON.stringify(
       {
         passed: true,
-        initialQuantity: 19,
+        initialQuantity: 20,
         externalQuantityRemoved: 3,
-        finalQuantity: 16,
+        finalQuantity: 17,
         internalQuantityMoved: 3,
-        sourceQuantity: 4,
+        sourceQuantity: 5,
         receipts: 3,
         sourceAndReceivedProvenancePreserved: true,
         otherOwnerLotUnchanged: true,
         catalogUnchanged: true,
         lostAcknowledgementAndReloadRecoveredOnce: true,
+        lastCopyRecovery: true,
+        expiredLoginRecovery: true,
         recipientHistoryPrivate: true,
         desktopAndPhone: true,
         final,

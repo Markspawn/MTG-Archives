@@ -17,6 +17,7 @@ export class HandoffError extends Error {
   constructor(
     message: string,
     readonly status = 409,
+    readonly outcomeKnown = false,
   ) {
     super(message);
   }
@@ -236,12 +237,18 @@ async function readHandoffOptions(
   itemIds: string[],
 ) {
   const access = await actorFor(db, actor);
-  if (
-    !itemIds.length ||
-    itemIds.length > 1000 ||
-    itemIds.some((id) => !id || id.length > 200)
-  )
+  if (itemIds.length > 1000 || itemIds.some((id) => !id || id.length > 200))
     throw new HandoffError("Choose a card printing first.");
+  // Resume a frozen confirmation even after its final copy left Inventory.
+  // No source or recipient information is disclosed by this empty context.
+  if (!itemIds.length)
+    return {
+      actorUserId: access.user.id,
+      requestId: randomUUID(),
+      recipients: [],
+      recentPeople: [],
+      lots: [],
+    };
   const items = await db.inventoryItem.findMany({
     where: {
       id: { in: [...new Set(itemIds)] },
@@ -366,10 +373,13 @@ export async function giveInventoryCard(
               },
             },
           });
-          if (
-            !source ||
-            (!access.admin && source.currentOwnerId !== access.user.playerId)
-          )
+          if (!source)
+            throw new HandoffError(
+              "This inventory is no longer available. Reopen the card to review its current copies.",
+              409,
+              true,
+            );
+          if (!access.admin && source.currentOwnerId !== access.user.playerId)
             throw new HandoffError(
               "This inventory is unavailable or belongs to another person.",
             );
@@ -378,6 +388,8 @@ export async function giveInventoryCard(
           if (handoffStamp(source) !== input.expectedStamp)
             throw new HandoffError(
               "This card changed. Reopen the handoff to review the current copies.",
+              409,
+              true,
             );
           const holds = await reserved(tx, [source.id]);
           if (input.quantity > source.quantity - (holds.get(source.id) ?? 0))

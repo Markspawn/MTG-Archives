@@ -1223,6 +1223,7 @@ export default async function InventoryPage({
             cardLabels={cardLabels}
             isAdmin={adminModeActive}
             huntOwnerId={user?.playerId ?? undefined}
+            handoffActorUserId={user?.id}
             displayMode={displayMode}
             totalMatchingCount={totalMatchingCount}
             totalMatchingCards={filteredPrintingGroups.reduce(

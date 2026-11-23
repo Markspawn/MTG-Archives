@@ -137,6 +137,7 @@ export function CardHandoffDialog({
     const storageKey = "mtg-card-handoff:" + options.actorUserId;
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(frozen));
+      window.dispatchEvent(new Event("mtg-card-handoff-pending"));
     } catch {}
     try {
       const response = await fetch("/api/inventory/handoffs", {
@@ -147,11 +148,14 @@ export function CardHandoffDialog({
         }),
         result = await response.json();
       if (!response.ok) {
-        if (result.definite) {
+        // A rejected retry (for example an expired login) cannot disprove a
+        // previously committed request whose acknowledgement was lost.
+        if (result.definite && (!pending || result.outcomeKnown)) {
           setPending(null);
           requestId.current = null;
           try {
             sessionStorage.removeItem(storageKey);
+            window.dispatchEvent(new Event("mtg-card-handoff-pending"));
           } catch {}
         }
         throw Error(
@@ -161,6 +165,7 @@ export function CardHandoffDialog({
       }
       try {
         sessionStorage.removeItem(storageKey);
+        window.dispatchEvent(new Event("mtg-card-handoff-pending"));
       } catch {}
       onSuccess(
         `${result.quantity} ${result.quantity === 1 ? "copy" : "copies"} of ${frozen.cardName} ${frozen.input.kind === "TRADE" ? "traded" : "given"} to ${result.recipientName}${result.internal ? " · saved to their Unassigned location" : " · recorded in your handoff history"}.`,

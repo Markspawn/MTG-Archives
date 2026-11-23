@@ -47,6 +47,7 @@ export function handoffError(error: unknown) {
             ? "Check the recipient and copy quantity."
             : "The result could not be verified. Retry the same confirmation to check it safely.",
       definite,
+      outcomeKnown: error instanceof HandoffError && error.outcomeKnown,
     },
     {
       status:
