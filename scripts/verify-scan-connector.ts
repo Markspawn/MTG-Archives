@@ -3,7 +3,7 @@ import {randomUUID} from "node:crypto";
 import {basename} from "node:path";
 import {PrismaClient} from "@prisma/client";
 import {seedBatchStateFixture,cleanBatchStateFixture} from "./verify-acquisition-batch-state";
-import {createConnectorAuthorization,exchangeConnectorToken,connectorAccess,revokeConnectorToken} from "../lib/scan-connector-auth";
+import {ConnectorAuthorizationError,createConnectorAuthorization,exchangeConnectorToken,connectorAccess,revokeConnectorToken} from "../lib/scan-connector-auth";
 import {CONNECTOR_CLIENT_ID,connectorResource,pkceChallenge} from "../lib/scan-connector-policy";
 import {connectorBatch,listConnectorBatches,listConnectorCards} from "../lib/scan-connector-tools";
 import {connectorEvidenceTicket} from "../lib/scan-connector-evidence";
@@ -96,6 +96,9 @@ export async function verifyScanConnector(db:PrismaClient){
     const bad=new URLSearchParams(normal.request);bad.set("code_verifier","wrong".repeat(10));assert.equal(await exchangeConnectorToken(db,bad),null);
     await connectorAccess(db,normal.token.access_token);
     const replay=await issueConnectorFixtureToken(db,owner);assert.equal(await exchangeConnectorToken(db,replay.request),null);await assert.rejects(connectorAccess(db,replay.token.access_token));
+    await assert.rejects(connectorAccess(db,adminOwn.token.access_token,["scans:read","scans:all-users"]),error=>error instanceof ConnectorAuthorizationError&&error.scopes==="scans:read scans:confirm scans:all-users");
+    const adminReadAll=await issueConnectorFixtureToken(db,admin,true,false);
+    await assert.rejects(connectorAccess(db,adminReadAll.token.access_token,["scans:read","scans:confirm"]),error=>error instanceof ConnectorAuthorizationError&&error.scopes==="scans:read scans:confirm scans:all-users");
     const rotating=await issueConnectorFixtureToken(db,owner);const refresh=new URLSearchParams({grant_type:"refresh_token",client_id:CONNECTOR_CLIENT_ID,resource:connectorResource(),refresh_token:rotating.token.refresh_token,scope:"scans:read"});
     const refreshed=await exchangeConnectorToken(db,refresh);assert(refreshed);assert.equal(refreshed.scope,"scans:read");await assert.rejects(connectorAccess(db,rotating.token.access_token));await assert.rejects(connectorAccess(db,refreshed.access_token,["scans:confirm"]));
     assert.equal(await exchangeConnectorToken(db,refresh),null);await assert.rejects(connectorAccess(db,refreshed.access_token));

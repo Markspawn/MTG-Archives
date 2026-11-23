@@ -1,7 +1,7 @@
 import type {Prisma, PrismaClient, ScanConnectorGrant} from "@prisma/client";
 import {isAdminUser} from "./auth-policy";
 import {ACCESS_SECONDS, CONNECTOR_CLIENT_ID, GRANT_SECONDS, connectorAuthorization,
-  connectorResource, connectorSecurityKey, credentialDigest, opaqueCredential, pkceChallenge} from "./scan-connector-policy";
+  connectorResource, connectorScopes, connectorSecurityKey, credentialDigest, opaqueCredential, pkceChallenge} from "./scan-connector-policy";
 
 type Db = Prisma.TransactionClient;
 export class ConnectorAuthorizationError extends Error {
@@ -27,8 +27,10 @@ export async function connectorAccess(db: Db, token: string, required: string[] 
   }
   if (!row || row.rotatedAt || row.expiresAt.getTime() <= Date.now()) throw new ConnectorAuthorizationError(required.join(" "));
   const access = await validGrant(db, row.grant);
-  if (row.scopes.some(scope => !row!.grant.scopes.includes(scope)) || required.some(scope => !row!.scopes.includes(scope)))
+  if (row.scopes.some(scope => !row!.grant.scopes.includes(scope)))
     throw new ConnectorAuthorizationError(required.join(" "));
+  if (required.some(scope => !row!.scopes.includes(scope)))
+    throw new ConnectorAuthorizationError(connectorScopes.filter(scope => row!.scopes.includes(scope) || required.includes(scope)).join(" "));
   return {...access, grant: {...access.grant, scopes: row.scopes}, actor: {...access.actor, adminMode: row.scopes.includes("scans:all-users")}};
 }
 export async function createConnectorAuthorization(db: PrismaClient, userId: string, params: URLSearchParams,
