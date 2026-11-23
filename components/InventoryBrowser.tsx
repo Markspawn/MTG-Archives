@@ -2570,6 +2570,7 @@ export function InventoryBrowser({
     [
       capabilities.canDelete,
       capabilities.canEdit,
+      capabilities.canMove,
       capabilities.canViewPrivateSourceInfo,
       capabilities.canViewVisibility,
       canShowPublicOwnerIdentity,
