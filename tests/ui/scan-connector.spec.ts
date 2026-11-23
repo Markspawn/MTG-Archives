@@ -29,6 +29,7 @@ test("per-user OAuth, admin opt-in, private MCP images and revocation work throu
   // Capture the real authorization response before following its external
   // redirect. Browser routing does not reliably intercept a redirected URL.
   await context.route('**/api/scan-connector/authorize',async route=>{
+    expect(route.request().headers().origin).toBe(baseURL);
     const response=await route.fetch({maxRedirects:0});expect(response.status()).toBe(303);
     callback=new URL(response.headers().location);expect(callback.origin).toBe('https://chatgpt.com');
     expect(callback.pathname).toBe('/connector_platform_oauth_redirect');
@@ -52,7 +53,7 @@ test("per-user OAuth, admin opt-in, private MCP images and revocation work throu
   await page.getByLabel(/username or email/i).fill(fixture.ids[0]);await page.getByLabel(/^password$/i).fill(password);await page.getByRole('button',{name:'Log in',exact:true}).click();
   await expect(page.getByRole('checkbox',{name:/Administrator: allow/})).toBeDisabled();
   await expect(page.getByRole('checkbox',{name:/Allow ChatGPT to confirm/})).toBeChecked();
-  const consentResponse=await context.request.get(baseURL+'/settings/connections/authorize?'+ownRequest.params);expect(consentResponse.headers()['x-frame-options']).toBe('DENY');
+  const consentResponse=await context.request.get(baseURL+'/settings/connections/authorize?'+ownRequest.params);expect(consentResponse.headers()['x-frame-options']).toBe('DENY');expect(consentResponse.headers()['referrer-policy']).toBe('same-origin');
   for(const width of [1366,390]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('consent-'+width+'.png'),fullPage:true});}
   await page.setViewportSize({width:1366,height:900});const own=await exchange(ownRequest);expect(own.scope).toBe('scans:read scans:confirm');
   const listing=payload(await rpc('list_open_batches',{},own.access_token));expect(listing.batches.map((x:any)=>x.sessionId)).toEqual([fixture.captures[0].sessionId]);

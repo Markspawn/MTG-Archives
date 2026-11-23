@@ -35,7 +35,10 @@ export function middleware(request: NextRequest) {
     if (pathname === "/settings/connections/authorize") {
       response.headers.set("X-Frame-Options", "DENY");
       response.headers.set("Content-Security-Policy", "frame-ancestors 'none'");
-      response.headers.set("Referrer-Policy", "no-referrer");
+      // Native form submissions need a same-origin Origin header. Chromium
+      // sends Origin:null under no-referrer; same-origin still hides the
+      // authorization query from external destinations.
+      response.headers.set("Referrer-Policy", "same-origin");
       response.headers.set("Cache-Control", "no-store");
     }
     return response;
