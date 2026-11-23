@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { CardHunt } from "./CardHunt";
+import { CardHandoffDialog } from "./CardHandoffDialog";
 import { INVENTORY_SORT_FIELDS } from "@/lib/inventory-sort";
 import { inventorySortHref } from "./inventorySortNavigation";
 import { StorageDestinationPicker } from "./StorageDestinationPicker";
@@ -1182,6 +1183,7 @@ function CardDetail({
   onEdit,
   onAudit,
   onDelete,
+  onGive,
   canHunt,
 }: {
   row: InventoryRow;
@@ -1194,6 +1196,7 @@ function CardDetail({
   onEdit?: () => void;
   onAudit?: () => void;
   onDelete?: () => Promise<void>;
+  onGive?: () => void;
   canHunt: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -1456,6 +1459,7 @@ function CardDetail({
               </div>
             </details>
           ) : null}
+          {onGive ? <button type="button" onClick={onGive} className={cn(filterPrimaryButtonClass,"px-2 py-1")}>Give / trade away</button> : null}
           {capabilities.canEdit && onEdit ? (
             <button
               onClick={onEdit}
@@ -1759,6 +1763,8 @@ export function InventoryBrowser({
       : [],
   );
   const [selected, setSelected] = useState<InventoryRow | null>(null);
+  const [handoffRow,setHandoffRow]=useState<InventoryRow|null>(null);
+  const [handoffMessage,setHandoffMessage]=useState("");
   const [editing, setEditing] = useState<InventoryRow | null>(null);
   const [auditRow, setAuditRow] = useState<InventoryRow | null>(null);
   const auditRequest = useRef(0);
@@ -2522,6 +2528,7 @@ export function InventoryBrowser({
                           Edit inventory
                         </button>
                       ) : null}
+                      {capabilities.canMove ? <button type="button" className="w-full rounded px-2 py-1 text-left text-xs hover:bg-zinc-900" onClick={()=>setHandoffRow(row.original)}>Give / trade away</button> : null}
                       {capabilities.canDelete ? (
                         <button
                           type="button"
@@ -3536,6 +3543,8 @@ export function InventoryBrowser({
         </div>
       )}
 
+      {handoffMessage&&<div role="status" className="fixed bottom-4 right-4 z-[80] max-w-[calc(100%-2rem)] rounded border border-emerald-600 bg-[var(--app-surface)] p-4 shadow-xl sm:max-w-md"><p>{handoffMessage}</p><div className="mt-2 flex gap-4"><a href="/inventory/handoffs" className="underline">View history</a><button type="button" onClick={()=>setHandoffMessage("")}>Dismiss</button></div></div>}
+      {handoffRow&&<CardHandoffDialog itemIds={getRowSourceIds(handoffRow)} cardName={handoffRow.cardName} onClose={()=>setHandoffRow(null)} onSuccess={message=>{setHandoffRow(null);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
       {selected ? (
         <CardDetail
           key={selected.id}
@@ -3547,6 +3556,7 @@ export function InventoryBrowser({
           deckTargets={deckTargets}
           onAddToDeck={onAddToDeck}
           canHunt={huntOwnerId === selected.currentOwnerId}
+          onGive={capabilities.canMove&&selected.displayMode==="exact"?()=>{setHandoffRow(selected);setSelected(null);}:undefined}
           onEdit={
             capabilities.canEdit && selected.displayMode === "exact"
               ? () => {

@@ -328,6 +328,10 @@ jobs:
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npx tsx scripts/ci/inventory-delete-reservations.ts
+      - name: Immediate card handoff ownership, stock, replay and rollback
+        run: npx tsx scripts/verify-card-handoffs.ts --run
+        env:
+          MTG_HANDOFF_TEST: "1"
 
   trade-wishlist-integrity:
     name: Trade wishlist PostgreSQL conservation
