@@ -26,7 +26,14 @@ test("per-user OAuth, admin opt-in, private MCP images and revocation work throu
   const anonymous=await rpc('list_open_batches',{});expect(anonymous.isError).toBe(true);expect(anonymous._meta['mcp/www_authenticate'][0]).toContain('oauth-protected-resource');
   const metadata=await context.request.get(baseURL+'/.well-known/oauth-authorization-server');expect((await metadata.json()).code_challenge_methods_supported).toEqual(['S256']);
   let callback:URL|undefined;
-  await context.route(/^https:\/\/chatgpt\.com\/connector_platform_oauth_redirect/,async route=>{callback=new URL(route.request().url());await route.fulfill({contentType:'text/html',body:'Controlled OAuth callback received'});});
+  // Capture the real authorization response before following its external
+  // redirect. Browser routing does not reliably intercept a redirected URL.
+  await context.route('**/api/scan-connector/authorize',async route=>{
+    const response=await route.fetch({maxRedirects:0});expect(response.status()).toBe(303);
+    callback=new URL(response.headers().location);expect(callback.origin).toBe('https://chatgpt.com');
+    expect(callback.pathname).toBe('/connector_platform_oauth_redirect');
+    await route.fulfill({status:200,contentType:'text/html',body:'Controlled OAuth callback received'});
+  });
   const authorize=async(allUsers=false,scope='scans:read scans:confirm scans:all-users')=>{
     callback=undefined;const verifier=randomUUID()+randomUUID(),state=randomUUID();
     const params=new URLSearchParams({response_type:'code',client_id:'mtg-archives-chatgpt',redirect_uri:'https://chatgpt.com/connector_platform_oauth_redirect',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',resource:baseURL+'/api/scan-connector/mcp',scope,state});
