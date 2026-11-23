@@ -131,7 +131,9 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
   await page.goto(lastInventory);
   dialog = await open(f.lastName);
   await dialog.getByLabel("Recipient name", { exact: true }).fill("Lee");
-  await dialog.getByLabel("Record as", { exact: true }).selectOption("TRADE");
+  await dialog
+    .getByRole("combobox", { name: "Record as", exact: true })
+    .selectOption("TRADE");
   await dialog
     .getByRole("button", { name: "Confirm trade away · 1 copy", exact: true })
     .click();
@@ -200,7 +202,7 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     .getByRole("radio", { name: "Archive user", exact: true })
     .check();
   await dialog
-    .getByLabel("Archive recipient", { exact: true })
+    .getByRole("combobox", { name: "Archive recipient", exact: true })
     .selectOption(f.ids[1]);
   await dialog.getByLabel("Copies", { exact: true }).fill("3");
   await expect(dialog.getByText(/immediately removes/)).toContainText(
@@ -300,7 +302,7 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     .getByRole("radio", { name: "Archive user", exact: true })
     .check();
   await dialog
-    .getByLabel("Archive recipient", { exact: true })
+    .getByRole("combobox", { name: "Archive recipient", exact: true })
     .selectOption(f.ids[0]);
   expect(
     await page.evaluate(
