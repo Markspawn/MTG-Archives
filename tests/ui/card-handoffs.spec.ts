@@ -286,7 +286,9 @@ test("quick external and Archive handoffs conserve stock and recover a lost ackn
     fullPage: true,
   });
   await page.goto("/inventory/handoffs?owner=" + f.ids[0]);
-  await expect(page.getByRole("alert")).toContainText("own handoff history");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "own handoff history",
+  );
   await page.goto(inventory);
   await page
     .getByLabel("Actions for " + f.cardName, { exact: true })
