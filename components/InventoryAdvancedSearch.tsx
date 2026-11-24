@@ -1469,7 +1469,7 @@ export function InventoryAdvancedSearch({
                   label="Color ID"
                   ariaLabel="Color identity"
                 />
-                {capabilities.showPriceFilter ? <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
+                <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
                   <span className={filterLabelClass}>Mana value</span>
                   <select
                     name="mvOp"

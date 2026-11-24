@@ -256,6 +256,8 @@ export default async function SettingsPage({
             ["pricing", "Pricing"],
             ["notifications", "Notifications"],
             ["collection", "Collection"],
+            ["public-inventory-sharing", "Inventory sharing"],
+            ["public-wishlist-sharing", "Wishlist sharing"],
           ].map(([id, label]) => (
             <a key={id} href={`#${id}`} className={filterButtonClass}>
               {label}
@@ -572,7 +574,7 @@ export default async function SettingsPage({
           </SubmitButton>
         </div>
       </form>
-      <section id="public-inventory-sharing" aria-labelledby="public-inventory-sharing-heading" className="space-y-3 rounded border border-[var(--app-border)] p-4">
+      {user.playerId ? <section id="public-inventory-sharing" aria-labelledby="public-inventory-sharing-heading" className="space-y-3 rounded border border-[var(--app-border)] p-4">
         <h2 id="public-inventory-sharing-heading" className="text-xl font-semibold">Public Inventory sharing</h2>
         <p className="text-sm app-muted">Your personalized link stays on your collection. Share it directly or use it as the destination for your store’s QR code.</p>
         <PublicShareLink href={publicInventoryLink(user.username)} label="Your public inventory" />
@@ -583,6 +585,7 @@ export default async function SettingsPage({
           <SubmitButton pendingLabel="Saving…" className={filterPrimaryButtonClass}>Save Inventory sharing</SubmitButton>
         </form>
       </section>
+      : null}
       <section id="public-wishlist-sharing" aria-labelledby="public-wishlist-sharing-heading" className="space-y-3 rounded border border-[var(--app-border)] p-4">
         <h2 id="public-wishlist-sharing-heading" className="text-xl font-semibold">Public Wishlist sharing</h2>
         <p className="text-sm app-muted">Choose which categories to share. All categories start private; leave every box unchecked to share none.</p>
