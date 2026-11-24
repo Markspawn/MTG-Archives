@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { buildCardHunt, CardHuntError } from "./card-hunt-service";
+import { buildCardHunt, CardHuntError, huntTargetStamp } from "./card-hunt-service";
 import { huntMatches } from "./card-hunt";
 import { handoffStamp } from "./card-handoff-policy";
 import { giveInventoryCardInTransaction, HandoffError } from "./card-handoffs";
@@ -24,6 +24,8 @@ import { lockInventoryDestinations } from "./inventory-capacity";
 import { buildReservedInventoryQuantities } from "./trade-lines";
 import { recordInventoryAudit } from "./inventory-audit";
 import { writeInventoryReceipt } from "./inventory-receipt";
+
+import { syncCommittedDeckPrintings } from "./deck-committed-printings";
 
 type Tx = Prisma.TransactionClient;
 async function owner(tx: Tx, userId: string) {
@@ -413,6 +415,17 @@ async function apply(
       destinations.set(deck.id, destination);
     }
   }
+  const targetUpdates: Array<{ requestId: string; stamp: string }> = [];
+  if (input.action === "COMMIT") {
+    for (const deck of decks)
+      await syncCommittedDeckPrintings(tx, deck.id, actor.playerId,
+        targets.filter(target => target.deckId === deck.id).map(target => target.rowId));
+    const refreshed = await tx.deckCard.findMany({ where: { deckId: { in: targetDeckIds } } });
+    for (const line of lines.values()) {
+      const row = refreshed.find(row => row.id === line.request.deckCardId && row.deckId === line.request.deckId);
+      if (row) targetUpdates.push({ requestId: line.request.id, stamp: huntTargetStamp(row) });
+    }
+  }
   const updates = await tx.inventoryItem.findMany({
     where: { id: { in: ids } },
   });
@@ -429,6 +442,7 @@ async function apply(
         : `${input.kind === "TRADE" ? "Traded" : "Gave"} ${quantity} copies to ${[...destinations.values()][0].name}.`,
     destinations: [...destinations.values()],
     handoffIds,
+    targetUpdates,
     stockUpdates: updates.map((item) => ({
       id: item.id,
       stamp: handoffStamp(item),

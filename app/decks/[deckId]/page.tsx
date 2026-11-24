@@ -38,6 +38,7 @@ import {
   isDeckLocation,
   matchesDeckCardPrinting,
 } from "@/lib/deck-commitments";
+import { planCommittedDeckPrintings } from "@/lib/deck-committed-printings";
 import { cardPriceNumber } from "@/lib/deck-view";
 import {
   ensureDefaultLocation,
@@ -49,6 +50,7 @@ import { activeDeckTradeStatuses } from "@/lib/deck-write-fence";
 import { resolveDeckVisibility, visibilityLabel } from "@/lib/visibility";
 import { deckTagsText } from "@/lib/deck-tags";
 import {
+  matchCommittedDeckPrintings,
   deleteDeck,
   returnAllCommittedDeckInventory,
   updateDeck,
@@ -374,6 +376,11 @@ export default async function DeckDetailPage({
         oracleId: entry.oracleId,
       })))
     : null;
+  const committedPrintingPlans = new Map(planCommittedDeckPrintings(
+    [...deck.cards].sort((a,b) => a.section.localeCompare(b.section) || a.id.localeCompare(b.id)),
+    inventoryItems.filter(item => item.location?.deckId === deck.id),
+  ).map(plan => [plan.rowId, plan]));
+  const mismatchedPrintings = [...committedPrintingPlans.values()].filter(plan => plan.changed).length;
   const editorRows = deck.cards.map((deckCard) => {
     const rowInventoryItems = candidatesForDeckCard(deckCard, inventoryMaps);
     const owned = summarizeDeckCardOwnership(
@@ -432,9 +439,9 @@ export default async function DeckDetailPage({
       available: owned.available,
       availableExact: owned.availableExact,
       availableOther: owned.availableOther,
-      committedToThisDeck: owned.committedToThisDeck,
+      committedToThisDeck: committedPrintingPlans.get(deckCard.id)?.committed ?? 0,
       committedToOtherDecks: owned.committedToOtherDecks,
-      commitmentMissing: owned.commitmentMissing,
+      commitmentMissing: Math.max(0, deckCard.quantity - (committedPrintingPlans.get(deckCard.id)?.committed ?? 0)),
       commitOptions,
       returnOptions,
       missing: owned.missing,
@@ -442,9 +449,7 @@ export default async function DeckDetailPage({
       enoughOwned: owned.enoughOwned,
       matchType: owned.matchType,
       locationSummary: canEdit ? owned.locationSummary : "",
-      committedQuantity: deckCard.cardId
-        ? (committedSummary.byCardId[deckCard.cardId] ?? 0)
-        : 0,
+      committedQuantity: committedPrintingPlans.get(deckCard.id)?.committed ?? 0,
       createdAt: deckCard.createdAt.toISOString(),
       card: deckCard.card
         ? {
@@ -702,6 +707,15 @@ export default async function DeckDetailPage({
 
       <DeckToolsNav deckId={deck.id} active="builder" canHunt={Boolean(user?.playerId && user.id === deck.ownerUserId && !leagueDeck)} />
 
+      {canEdit && inventoryCommitmentEnabled && mismatchedPrintings > 0 && (
+        <div role="status" className="app-panel space-y-2 border-amber-600 p-4">
+          <p>Some committed copies use different printings from this deck list. Match the list to the physical cards, splitting different printings into separate rows. Inventory stays in place.</p>
+          <form action={matchCommittedDeckPrintings}>
+            <input type="hidden" name="deckId" value={deck.id} />
+            <SubmitButton className={filterPrimaryButtonClass} pendingLabel="Matching printings…">Match committed printings</SubmitButton>
+          </form>
+        </div>
+      )}
       <DeckListEditor
         deckId={deck.id}
         rows={editorRows}

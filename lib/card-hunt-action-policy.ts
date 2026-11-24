@@ -88,5 +88,6 @@ export type HuntActionResult = {
   destinations: Array<{ name: string; quantity: number; deckId?: string }>;
   handoffIds: string[];
   stockUpdates: Array<{ id: string; stamp: string }>;
+  targetUpdates?: Array<{ requestId: string; stamp: string }>;
   replay?: boolean;
 };

@@ -67,6 +67,10 @@ export function verifiedHuntOutcome(
     !Array.isArray(result.destinations) ||
     !Array.isArray(result.stockUpdates) ||
     !Array.isArray(result.handoffIds) ||
+    (result.targetUpdates !== undefined &&
+      (!Array.isArray(result.targetUpdates) || result.targetUpdates.some(
+        row => !row || typeof row.requestId !== "string" || !stamp(row.stamp),
+      ))) ||
     result.stockUpdates.some(
       (row) => !row || typeof row.id !== "string" || !stamp(row.stamp),
     ) ||

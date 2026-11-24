@@ -64,9 +64,17 @@ then choose an action. Up to 500 pulls fit one confirmation.
 
 **Commit selected to decks** moves saved-deck pulls to their respective decks.
 All selected pulls must come from saved decks. Physical quantities, lot provenance
-and the list's preferred printing are preserved; an alternate physical printing
-does not rewrite the list. Existing commitments reduce each deck's needs
+are preserved. The deck list follows the committed physical printings: mixed
+printings become separate rows with their own quantities, section and notes.
+Unfilled copies retain their requested printing. For older mismatches, the deck
+page offers **Match committed printings**, which corrects the list without moving
+physical copies. Existing commitments reduce each deck's needs
 separately. League decks and trade-reserved decks are excluded.
+
+Deck commitment controls use the same whole-deck allocation for single commits,
+bulk commits and adding real copies. A committed basic land belongs to one row;
+it cannot also fill a second row for another printing. Basic lands remain covered
+for deck planning, while physical commitment capacity uses actual copies.
 
 **Give / trade selected** records a named outside recipient in existing private
 handoff history, or immediately transfers to an Archive user's Unassigned location.

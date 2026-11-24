@@ -222,7 +222,7 @@ export function CardHuntActionDialog({
             <p>
               {quantity} selected copies.{" "}
               {commit
-                ? "Each pull goes to its named deck. The preferred printing in the deck list stays unchanged."
+                ? "Each pull goes to its named deck. The deck list matches the committed printings, with separate rows for different printings. Unfilled copies keep their requested printing."
                 : "These copies will leave your available inventory and appear in your handoff history."}
             </p>
             {!commit && (

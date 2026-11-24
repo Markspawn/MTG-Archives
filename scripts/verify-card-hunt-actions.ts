@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type DeckCard } from "@prisma/client";
 import { buildCardHunt, type CardHuntInput } from "../lib/card-hunt-service";
 import {
   performHuntAction,
   getHuntActionContext,
 } from "../lib/card-hunt-actions";
 import { ensureDeckLocation } from "../lib/deck-commitments";
+import { getDeckRowCommittedQuantity, syncCommittedDeckPrintings } from "../lib/deck-committed-printings";
+import { lockWritableDeck } from "../lib/deck-write-fence";
+import { advanceHunt } from "../lib/card-hunt-progress";
 import { handoffStamp } from "../lib/card-handoff-policy";
 import type { HuntActionInput } from "../lib/card-hunt-action-policy";
 import type { HuntPick } from "../lib/card-hunt";
@@ -459,7 +462,7 @@ async function main() {
     assert.equal(
       (await db.deckCard.findUniqueOrThrow({ where: { id: f.deckRows[1].id } }))
         .cardId,
-      f.preferred.id,
+      f.alternate.id,
     );
     assert((await performHuntAction(db, f.owner, commit)).replay);
     assert.equal((await fresh(f.ring.id)).quantity, 2);
@@ -804,6 +807,69 @@ async function main() {
     console.log(
       "Hunt actions SQL PASS: actual audit-trigger rollback, unknown-outcome same-request retry and no duplicate receipt",
     );
+    const repairDeck = await db.deck.create({ data: { ownerUserId: f.owner, name: "Historical mixed printings" } });
+    const repairRow = await db.deckCard.create({ data: { deckId: repairDeck.id, cardId: f.preferred.id, oracleId: f.preferred.oracleId, cardName: f.preferred.name, quantity: 4, section: "SIDEBOARD", notes: "Keep my notes" } });
+    const repairLocation = await db.$transaction(tx => ensureDeckLocation(tx, { ...repairDeck, ownerUser: { playerId: f.owner } }));
+    await db.inventoryItem.createMany({ data: [f.preferred, f.alternate].map(card => ({ currentOwnerId: f.owner, cardId: card.id, quantity: 1, condition: "NM", locationId: repairLocation.id })) });
+    await db.inventoryItem.create({ data: { currentOwnerId: f.owner, cardId: f.alternate.id, quantity: 2, condition: "NM", locationId: f.box.id } });
+    const repair = () => db.$transaction(async tx => {
+      await lockWritableDeck(tx, repairDeck.id, f.owner);
+      return syncCommittedDeckPrintings(tx, repairDeck.id, f.owner);
+    }, { isolationLevel: "Serializable" });
+    const stockBeforeRepair = await fingerprint(db, ["InventoryItem", "InventoryAuditLog", "CardHuntAction", "CardHandoff"]);
+    assert.equal(await repair(), 1);
+    assert.deepEqual(await fingerprint(db, ["InventoryItem", "InventoryAuditLog", "CardHuntAction", "CardHandoff"]), stockBeforeRepair);
+    let repairedRows = await db.deckCard.findMany({ where: { deckId: repairDeck.id } });
+    assert.deepEqual(repairedRows.map(row => [row.cardId, row.quantity]).sort(), [[f.preferred.id, 3], [f.alternate.id, 1]].sort());
+    assert(repairedRows.every(row => row.section === "SIDEBOARD" && row.notes === "Keep my notes"));
+    const repairedFingerprint = await fingerprint(db);
+    assert.equal(await repair(), 0);
+    assert.deepEqual(await fingerprint(db), repairedFingerprint);
+    const repairHunt: CardHuntInput = { ...f.hunt, sources: [{ kind: "DECK", id: "repair", deckId: repairDeck.id }], includeMaybeboard: true };
+    const repairPlan = await build(repairHunt);
+    const repairPick = repairPlan.boxes.flatMap(box => box.picks).find(pick => pick.deckCardId === repairRow.id)!;
+    assert.equal(repairPick.quantity, 2);
+    const firstCommit: HuntActionInput = { requestId: randomUUID(), action: "COMMIT", hunt: repairHunt, selected: selected([{ ...repairPick, quantity: 1 }]) };
+    const beforeCommit = (await totals())._sum.quantity;
+    const firstResult = await performHuntAction(db, f.owner, firstCommit);
+    assert.equal(firstResult.status, "APPLIED");
+    const next = advanceHunt(repairPlan, firstCommit.selected, firstResult);
+    const nextPick = next.boxes.flatMap(box => box.picks).find(pick => pick.deckCardId === repairRow.id)!;
+    assert.equal(nextPick.quantity, 1);
+    assert.notEqual(nextPick.targetStamp, repairPick.targetStamp);
+    const secondCommit: HuntActionInput = { requestId: randomUUID(), action: "COMMIT", hunt: repairHunt, selected: selected([nextPick]) };
+    assert.equal((await performHuntAction(db, f.owner, secondCommit)).status, "APPLIED");
+    assert.equal((await totals())._sum.quantity, beforeCommit);
+    repairedRows = await db.deckCard.findMany({ where: { deckId: repairDeck.id } });
+    assert.deepEqual(repairedRows.map(row => [row.cardId, row.quantity]).sort(), [[f.preferred.id, 1], [f.alternate.id, 3]].sort());
+    assert(repairedRows.every(row => row.section === "SIDEBOARD" && row.notes === "Keep my notes"));
+    const afterCommits = await fingerprint(db);
+    assert((await performHuntAction(db, f.owner, firstCommit)).replay);
+    assert((await performHuntAction(db, f.owner, secondCommit)).replay);
+    assert.deepEqual(await fingerprint(db), afterCommits);
+    assert.equal((await build(repairHunt)).planned, 0);
+    console.log("Hunt actions SQL PASS: historical printing repair changes no inventory/history, mixed quantities/notes/sections conserved, idempotent repair, consecutive partial commits without rebuild, same-printing row reuse and exact replay");
+    const basicsDeck = await db.deck.create({ data: { ownerUserId: f.owner, name: "Masters of Evil regression" } });
+    const basicsLocation = await db.$transaction(tx => ensureDeckLocation(tx, { ...basicsDeck, ownerUser: { playerId: f.owner } }));
+    const basicsRows: Array<{ row: DeckCard; offset: number }> = [];
+    for (const [name, number] of [["Island", 198], ["Mountain", 202], ["Swamp", 200]] as const) {
+      const oracle = randomUUID();
+      for (const offset of [0, 1]) {
+        const card = await db.card.create({ data: { scryfallId: randomUUID(), oracleId: oracle, name, setCode: "who", collectorNumber: String(number + offset), typeLine: `Basic Land — ${name}`, rarity: "common" } });
+        const row = await db.deckCard.create({ data: { deckId: basicsDeck.id, cardId: card.id, oracleId: oracle, cardName: name, quantity: 1 } });
+        basicsRows.push({ row, offset });
+        await db.inventoryItem.create({ data: { currentOwnerId: f.owner, cardId: card.id, quantity: 1, condition: "NM", locationId: offset ? null : basicsLocation.id } });
+      }
+    }
+    const beforeBasicChecks = await fingerprint(db);
+    await db.$transaction(async tx => {
+      await lockWritableDeck(tx, basicsDeck.id, f.owner);
+      const stock = await tx.inventoryItem.findMany({ where: { currentOwnerId: f.owner, locationId: basicsLocation.id }, include: { card: true } });
+      for (const { row, offset } of basicsRows)
+        assert.equal(await getDeckRowCommittedQuantity(tx, basicsDeck.id, row.id, stock), offset ? 0 : 1);
+    });
+    assert.deepEqual(await fingerprint(db), beforeBasicChecks);
+    console.log("Hunt actions SQL PASS: Masters of Evil basic-land capacity uses all deck rows, each exact copy once, matching loose printings remain eligible and read checks conserve every business table");
   } finally {
     await db.$executeRawUnsafe(
       `DROP TRIGGER IF EXISTS hunt_actions_fail_audit ON "InventoryAuditLog"`,
