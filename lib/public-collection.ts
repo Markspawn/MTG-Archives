@@ -324,8 +324,8 @@ export function buildPublicInventoryWhere(filters: PublicInventoryFilters) {
   return where;
 }
 
-function filterPublicInventoryByClientSafeFilters(
-  inventory: Array<{ card: any; quantity: number }>,
+function filterPublicInventoryByClientSafeFilters<T extends { card: any; quantity: number }>(
+  inventory: T[],
   filters: PublicInventoryFilters,
 ) {
   const structured = parseInventoryFilters(filters as any);

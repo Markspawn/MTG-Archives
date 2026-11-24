@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { scopedPublicInventoryParams, publicInventoryRowsWithoutPricing } from "../lib/public-inventory-scope";
+import { inventorySortHref } from "../components/inventorySortNavigation";
 
 const member = { username: "shop", ownerPlayerId: "store-player", displayName: "Local Store", hidePricing: true };
+
+test("sorting stays on the personalized collection route and resets only pagination", () => {
+  const url = new URL(inventorySortHref("/public/inventory/shop", "cardName=Bolt&page=3&displayMode=grouped", "quantity", "desc"), "https://example.test");
+  assert.equal(url.pathname, "/public/inventory/shop");
+  assert.equal(url.searchParams.get("cardName"), "Bolt");
+  assert.equal(url.searchParams.get("displayMode"), "grouped");
+  assert.equal(url.searchParams.get("sort"), "quantity");
+  assert.equal(url.searchParams.has("page"), false);
+});
 
 test("personalized browsing removes arbitrary owner overrides while preserving card filters", () => {
   const params = { owner: ["heather", "brian"], ownerId: "other", cardName: "Bolt", language: ["EN", "FR"], page: "2" };
