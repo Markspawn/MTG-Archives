@@ -3,11 +3,10 @@ import { z } from "zod";
 import { handoffHash, handoffStamp } from "./card-handoff-policy";
 import { parseDecklistText } from "./deck-import";
 import { isBasicLandCard } from "./card-types";
+import { planCommittedDeckPrintings } from "./deck-committed-printings";
 import { isSystemDeckLocation } from "./deck-inventory";
 import { buildReservedInventoryQuantities } from "./trade-lines";
 import {
-  huntMatches,
-  huntPrintingMatches,
   isPullableHuntStock,
   planCardHunt,
   type HuntRequest,
@@ -501,33 +500,13 @@ export async function buildCardHunt(
   }
   for (const source of sources.filter((source) => source.kind === "DECK")) {
     if (source.kind !== "DECK") continue;
-    const committed = new Map(
-      items
-        .filter(
-          (item) =>
-            item.currentOwnerId === user.playerId &&
-            item.location?.ownerPlayerId === user.playerId &&
-            item.location.deckId === source.deckId,
-        )
-        .map((item) => [item.id, item.quantity]),
+    const deckRequests = requests.filter(request => request.deckId === source.deckId);
+    const allocated = planCommittedDeckPrintings(
+      deckRequests.map(request => ({ ...request, cardName: request.name })),
+      items.filter(item => item.currentOwnerId === user.playerId &&
+        item.location?.ownerPlayerId === user.playerId && item.location.deckId === source.deckId),
     );
-    for (const request of requests.filter(
-      (request) => request.deckId === source.deckId,
-    )) {
-      let needed = request.quantity;
-      for (const item of [...stock].sort(
-        (a, b) =>
-          Number(huntPrintingMatches(request, b)) -
-          Number(huntPrintingMatches(request, a)),
-      )) {
-        if (!huntMatches(request, item)) continue;
-        const used = Math.min(needed, committed.get(item.id) ?? 0);
-        needed -= used;
-        if (used) committed.set(item.id, committed.get(item.id)! - used);
-        if (!needed) break;
-      }
-      request.alreadyInDeck = request.quantity - needed;
-    }
+    for (const [index, request] of deckRequests.entries()) request.alreadyInDeck = allocated[index].committed;
   }
   return result(stock);
 }

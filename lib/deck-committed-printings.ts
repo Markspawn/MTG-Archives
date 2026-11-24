@@ -36,7 +36,7 @@ export function planCommittedDeckPrintings(rows: Row[], stock: Stock[]) {
 /** Caller holds the deck owner gate and writable Deck lock, and has checked
  * ownership / trade reservations. This edits the deck list, never physical stock. */
 export async function syncCommittedDeckPrintings(tx: Prisma.TransactionClient, deckId: string, ownerPlayerId: string, selectedRowIds?: string[]) {
-  const rows = await tx.deckCard.findMany({ where: { deckId }, orderBy: [{ section: "asc" }, { id: "asc" }] });
+  const rows = await tx.deckCard.findMany({ where: { deckId, quantity: { gt: 0 } }, orderBy: [{ section: "asc" }, { id: "asc" }] });
   const stock = await tx.inventoryItem.findMany({
     where: { currentOwnerId: ownerPlayerId, quantity: { gt: 0 }, location: { deckId } },
     include: { card: true }, orderBy: { id: "asc" },
@@ -51,6 +51,7 @@ export async function syncCommittedDeckPrintings(tx: Prisma.TransactionClient, d
   const plans = planCommittedDeckPrintings(rows, stock);
   const primary = new Map(plans.map(plan => [plan.rowId, { ...plan.printings[0] }]));
   const changed = new Set<string>();
+  const removed = new Set<string>();
   const additions: Array<{ row: typeof rows[number]; cardId: string | null; quantity: number }> = [];
   for (const plan of plans) {
     const row = rows.find(row => row.id === plan.rowId)!;
@@ -69,8 +70,27 @@ export async function syncCommittedDeckPrintings(tx: Prisma.TransactionClient, d
       }
     }
   }
+  // A later partial pull can fully replace the last requested copies. Fold that
+  // newly replaced row into an existing row for the same printing/section/notes.
+  // Preserve intentionally separate original rows when their printing did not change.
+  for (const row of rows) {
+    const part = primary.get(row.id)!;
+    if (!changed.has(row.id) || removed.has(row.id) || part.cardId === row.cardId) continue;
+    const existing = rows.find(candidate => candidate.id !== row.id && !removed.has(candidate.id) &&
+      candidate.section === row.section && candidate.notes === row.notes && candidate.isCommander === row.isCommander &&
+      primary.get(candidate.id)?.cardId === part.cardId);
+    if (existing) {
+      primary.get(existing.id)!.quantity += part.quantity;
+      changed.add(existing.id);
+      removed.add(row.id);
+    }
+  }
   for (const row of rows) {
     if (!changed.has(row.id)) continue;
+    if (removed.has(row.id)) {
+      await tx.deckCard.delete({ where: { id: row.id } });
+      continue;
+    }
     const part = primary.get(row.id)!;
     const card = part.cardId ? cards.get(part.cardId) : null;
     await tx.deckCard.update({ where: { id: row.id }, data: {

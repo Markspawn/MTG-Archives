@@ -420,7 +420,7 @@ async function apply(
     for (const deck of decks)
       await syncCommittedDeckPrintings(tx, deck.id, actor.playerId,
         targets.filter(target => target.deckId === deck.id).map(target => target.rowId));
-    const refreshed = await tx.deckCard.findMany({ where: { id: { in: targets.map(target => target.rowId) }, deckId: { in: targetDeckIds } } });
+    const refreshed = await tx.deckCard.findMany({ where: { deckId: { in: targetDeckIds } } });
     for (const line of lines.values()) {
       const row = refreshed.find(row => row.id === line.request.deckCardId && row.deckId === line.request.deckId);
       if (row) targetUpdates.push({ requestId: line.request.id, stamp: huntTargetStamp(row) });
