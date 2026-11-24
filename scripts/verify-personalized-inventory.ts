@@ -12,17 +12,17 @@ export async function seedPersonalizedInventory(tag: string) {
     const id = `${tag}-${role}`;
     await prisma.player.create({ data: { id, name: id, displayName: id } });
     await prisma.user.create({ data: { id, username: role === "special" ? `${tag}/ #~%2F` : id, displayName: `${role} collection`, passwordHash, playerId: id, isActive: role !== "inactive", inventoryDefaultVisibility: "PUBLIC" } });
-    await prisma.inventoryLocation.create({ data: { id: `${id}-public`, name: `${role} public shelf`, ownerPlayerId: id, type: "BOX", visibility: "PUBLIC" } });
-    await prisma.inventoryLocation.create({ data: { id: `${id}-private`, name: `${role} secret shelf`, ownerPlayerId: id, type: "BOX", visibility: "PRIVATE" } });
+    await prisma.inventoryLocation.create({ data: { id: `${id}-public`, name: `${role} public shelf`, normalizedName: `${role}-public`, ownerPlayerId: id, type: "Box", visibility: "PUBLIC" } });
+    await prisma.inventoryLocation.create({ data: { id: `${id}-private`, name: `${role} secret shelf`, normalizedName: `${role}-private`, ownerPlayerId: id, type: "Box", visibility: "PRIVATE" } });
   }
   for (let i = 0; i < 13; i++) {
     const id = `${tag}-card-${i}`;
     await prisma.card.create({ data: { id, scryfallId: id, name: `${tag} Card ${String(i).padStart(2,"0")}`, setCode: "tst", setName: "Storefront test", collectorNumber: String(i), rarity: "common", typeLine: "Creature", prices: { usd: "12.34", eur: "10.25" } } });
-    for (const role of ["shop", "other", "special"]) await prisma.inventoryItem.create({ data: { id: `${tag}-${role}-item-${i}`, cardId: id, currentOwnerId: `${tag}-${role}`, originalOwnerId: `${tag}-${role}`, locationId: `${tag}-${role}-public`, quantity: role === "shop" ? 2 : 7 } });
+    for (const role of ["shop", "other", "special"]) await prisma.inventoryItem.create({ data: { id: `${tag}-${role}-item-${i}`, cardId: id, currentOwnerId: `${tag}-${role}`, originalOpenerId: `${tag}-${role}`, locationId: `${tag}-${role}-public`, quantity: role === "shop" ? 2 : 7 } });
   }
   await prisma.card.create({ data: { id: `${tag}-other-only`, scryfallId: `${tag}-other-only`, name: `${tag} OtherExclusive`, setCode: "oth", collectorNumber: "1", rarity: "rare", typeLine: "Artifact" } });
-  await prisma.inventoryItem.create({ data: { id: `${tag}-other-exclusive`, cardId: `${tag}-other-only`, currentOwnerId: `${tag}-other`, originalOwnerId: `${tag}-other`, locationId: `${tag}-other-public`, quantity: 10 } });
-  await prisma.inventoryItem.create({ data: { id: `${tag}-private-item`, cardId: `${tag}-card-0`, currentOwnerId: `${tag}-shop`, originalOwnerId: `${tag}-shop`, locationId: `${tag}-shop-private`, quantity: 100 } });
+  await prisma.inventoryItem.create({ data: { id: `${tag}-other-exclusive`, cardId: `${tag}-other-only`, currentOwnerId: `${tag}-other`, originalOpenerId: `${tag}-other`, locationId: `${tag}-other-public`, quantity: 10 } });
+  await prisma.inventoryItem.create({ data: { id: `${tag}-private-item`, cardId: `${tag}-card-0`, currentOwnerId: `${tag}-shop`, originalOpenerId: `${tag}-shop`, locationId: `${tag}-shop-private`, quantity: 100 } });
   return { username: `${tag}-shop`, other: `${tag}-other`, special: `${tag}/ #~%2F`, empty: `${tag}-empty`, inactive: `${tag}-inactive`, password, tag };
 }
 
