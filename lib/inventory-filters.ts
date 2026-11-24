@@ -302,6 +302,16 @@ function manaValueCondition(filters: InventoryFilters) {
   if (op === "gte") return { gte: filters.mv };
 }
 
+// A filtered view may span null locations and an owner's real Unassigned box.
+// Only a single concrete location can be sent as an extra bulk-action fence.
+export function singleInventoryLocationId(
+  filters: Pick<InventoryFilters, "locationIds" | "includeUnassignedLocation">,
+) {
+  return !filters.includeUnassignedLocation && filters.locationIds.length === 1
+    ? filters.locationIds[0]
+    : undefined;
+}
+
 export function buildInventoryWhereFromFilters(
   filters: InventoryFilters,
   options: {
