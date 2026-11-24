@@ -49,7 +49,6 @@ export const cardHuntInput = z
     includeMaybeboard: z.boolean().default(false),
     ignoreBasicLands: z.boolean().default(false),
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (
       [value.deckId, value.text?.trim(), value.card, value.sources].filter(
