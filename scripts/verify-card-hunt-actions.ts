@@ -8,7 +8,7 @@ import {
   getHuntActionContext,
 } from "../lib/card-hunt-actions";
 import { ensureDeckLocation } from "../lib/deck-commitments";
-import { syncCommittedDeckPrintings } from "../lib/deck-committed-printings";
+import { getDeckRowCommittedQuantity, syncCommittedDeckPrintings } from "../lib/deck-committed-printings";
 import { lockWritableDeck } from "../lib/deck-write-fence";
 import { advanceHunt } from "../lib/card-hunt-progress";
 import { handoffStamp } from "../lib/card-handoff-policy";
@@ -849,6 +849,27 @@ async function main() {
     assert.deepEqual(await fingerprint(db), afterCommits);
     assert.equal((await build(repairHunt)).planned, 0);
     console.log("Hunt actions SQL PASS: historical printing repair changes no inventory/history, mixed quantities/notes/sections conserved, idempotent repair, consecutive partial commits without rebuild, same-printing row reuse and exact replay");
+    const basicsDeck = await db.deck.create({ data: { ownerUserId: f.owner, name: "Masters of Evil regression" } });
+    const basicsLocation = await db.$transaction(tx => ensureDeckLocation(tx, { ...basicsDeck, ownerUser: { playerId: f.owner } }));
+    const basicsRows = [];
+    for (const [name, number] of [["Island", 198], ["Mountain", 202], ["Swamp", 200]] as const) {
+      const oracle = randomUUID();
+      for (const offset of [0, 1]) {
+        const card = await db.card.create({ data: { scryfallId: randomUUID(), oracleId: oracle, name, setCode: "who", collectorNumber: String(number + offset), typeLine: `Basic Land — ${name}`, rarity: "common" } });
+        const row = await db.deckCard.create({ data: { deckId: basicsDeck.id, cardId: card.id, oracleId: oracle, cardName: name, quantity: 1 } });
+        basicsRows.push({ row, offset });
+        await db.inventoryItem.create({ data: { currentOwnerId: f.owner, cardId: card.id, quantity: 1, condition: "NM", locationId: offset ? null : basicsLocation.id } });
+      }
+    }
+    const beforeBasicChecks = await fingerprint(db);
+    await db.$transaction(async tx => {
+      await lockWritableDeck(tx, basicsDeck.id, f.owner);
+      const stock = await tx.inventoryItem.findMany({ where: { currentOwnerId: f.owner, locationId: basicsLocation.id }, include: { card: true } });
+      for (const { row, offset } of basicsRows)
+        assert.equal(await getDeckRowCommittedQuantity(tx, basicsDeck.id, row.id, stock), offset ? 0 : 1);
+    });
+    assert.deepEqual(await fingerprint(db), beforeBasicChecks);
+    console.log("Hunt actions SQL PASS: Masters of Evil basic-land capacity uses all deck rows, each exact copy once, matching loose printings remain eligible and read checks conserve every business table");
   } finally {
     await db.$executeRawUnsafe(
       `DROP TRIGGER IF EXISTS hunt_actions_fail_audit ON "InventoryAuditLog"`,

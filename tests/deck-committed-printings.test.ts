@@ -48,3 +48,12 @@ test("a split deck list is stable on subsequent reconciliation", () => {
   assert.equal(again.reduce((sum, plan) => sum + plan.committed, 0), 4);
   assert.equal(split.reduce((sum, item) => sum + item.quantity, 0), 5);
 });
+test("Masters of Evil basics: one committed printing leaves the other printing unfilled", () => {
+  const cards = ["Island", "Mountain", "Swamp"];
+  const rows = cards.flatMap(name => ["a", "b"].map(printing => ({ id: name + printing, cardId: name + printing, oracleId: name, cardName: name, quantity: 1 })));
+  const committed = cards.map(name => stock(name + "a", 1, name, name));
+  const plans = planCommittedDeckPrintings(rows, committed);
+  assert.deepEqual(plans.map(plan => plan.committed), [1, 0, 1, 0, 1, 0]);
+  assert.equal(plans.reduce((sum, plan) => sum + plan.committed, 0), 3);
+  assert(plans.every(plan => !plan.changed));
+});

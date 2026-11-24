@@ -71,6 +71,11 @@ page offers **Match committed printings**, which corrects the list without movin
 physical copies. Existing commitments reduce each deck's needs
 separately. League decks and trade-reserved decks are excluded.
 
+Deck commitment controls use the same whole-deck allocation for single commits,
+bulk commits and adding real copies. A committed basic land belongs to one row;
+it cannot also fill a second row for another printing. Basic lands remain covered
+for deck planning, while physical commitment capacity uses actual copies.
+
 **Give / trade selected** records a named outside recipient in existing private
 handoff history, or immediately transfers to an Archive user's Unassigned location.
 This uses the individual Inventory handoff service. Given pulls leave the current

@@ -33,6 +33,22 @@ export function planCommittedDeckPrintings(rows: Row[], stock: Stock[]) {
   });
 }
 
+/** A row's capacity depends on the whole deck's allocation, not the sum of all
+ * matching oracle copies. In particular, two one-copy basic-land printing rows
+ * must not both claim the same committed land. Caller holds the writable deck. */
+export async function getDeckRowCommittedQuantity(
+  tx: Prisma.TransactionClient,
+  deckId: string,
+  rowId: string,
+  committedItems: Stock[],
+) {
+  const rows = await tx.deckCard.findMany({
+    where: { deckId },
+    orderBy: [{ section: "asc" }, { id: "asc" }],
+  });
+  return planCommittedDeckPrintings(rows, committedItems).find(plan => plan.rowId === rowId)?.committed ?? 0;
+}
+
 /** Caller holds the deck owner gate and writable Deck lock, and has checked
  * ownership / trade reservations. This edits the deck list, never physical stock. */
 export async function syncCommittedDeckPrintings(tx: Prisma.TransactionClient, deckId: string, ownerPlayerId: string, selectedRowIds?: string[]) {
