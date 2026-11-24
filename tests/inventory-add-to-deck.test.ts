@@ -8,7 +8,7 @@ const inventoryBrowser = readFileSync(
 );
 const inventoryPage = readFileSync("app/inventory/page.tsx", "utf8");
 const publicInventoryPage = readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 const inventoryListApi = readFileSync(
@@ -16,7 +16,7 @@ const inventoryListApi = readFileSync(
   "utf8",
 );
 const publicInventoryListApi = readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 const deckActions = readFileSync("app/decks/actions.ts", "utf8");

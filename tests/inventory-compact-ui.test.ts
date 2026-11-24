@@ -18,11 +18,11 @@ const inventoryListRoute = readFileSync(
   "utf8",
 );
 const publicInventoryPage = readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 const publicInventoryListRoute = readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 const inventorySort = readFileSync("lib/inventory-sort.ts", "utf8");

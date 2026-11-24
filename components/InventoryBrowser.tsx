@@ -771,11 +771,13 @@ function InventoryDetailPanel({
   capabilities,
   visibleLocationBreakdown,
   priceLabel,
+  showPricing,
 }: {
   row: InventoryRow;
   capabilities: InventoryCapabilities;
   visibleLocationBreakdown: InventoryLocationStack[];
   priceLabel: string;
+  showPricing: boolean;
 }) {
   return (
     <section className={detailBlockClass}>
@@ -786,10 +788,10 @@ function InventoryDetailPanel({
             <div className="text-xs uppercase text-zinc-500">Quantity</div>
             {row.quantity}
           </div>
-          <div>
+          {showPricing ? <div>
             <div className="text-xs uppercase text-zinc-500">Price</div>
             {priceLabel}
-          </div>
+          </div> : null}
           {!row.rollupPrinting ? (
             <div>
               <div className="text-xs uppercase text-zinc-500">Condition</div>
@@ -1185,6 +1187,7 @@ function CardDetail({
   onDelete,
   onGive,
   canHunt,
+  showPricing,
 }: {
   row: InventoryRow;
   onClose: () => void;
@@ -1198,6 +1201,7 @@ function CardDetail({
   onDelete?: () => Promise<void>;
   onGive?: () => void;
   canHunt: boolean;
+  showPricing: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const huntButton = useRef<HTMLButtonElement>(null);
@@ -1509,8 +1513,9 @@ function CardDetail({
             capabilities={capabilities}
             visibleLocationBreakdown={visibleLocationBreakdown}
             priceLabel={priceLabel}
+            showPricing={showPricing}
           />
-          {capabilities.canViewPrivateSourceInfo ? (
+          {showPricing && capabilities.canViewPrivateSourceInfo ? (
             mixedFinishes ? (
               Array.from(new Set(row.locationBreakdown?.map((stack) => stack.foilStatus))).map(
                 (finish) => (
@@ -1673,6 +1678,8 @@ export function InventoryBrowser({
   hasNextPage = false,
   hasPreviousPage = false,
   pageHrefBase,
+  sortActionPath,
+  showPricing = true,
   infiniteApiPath,
   initialPageSize,
   initialBrowsingMode,
@@ -1709,6 +1716,8 @@ export function InventoryBrowser({
   hasNextPage?: boolean;
   hasPreviousPage?: boolean;
   pageHrefBase?: string;
+  sortActionPath?: string;
+  showPricing?: boolean;
   infiniteApiPath?: string;
   initialPageSize: number;
   initialBrowsingMode: "paginated" | "infinite";
@@ -2464,12 +2473,12 @@ export function InventoryBrowser({
           <ColorIdentityIcons value={row.original.colorIdentity} />
         ),
       },
-      {
+      ...(showPricing ? [{
         accessorKey: "preferredPriceLabel",
         header: "Preferred Price",
         cell: ({ row }) =>
           printingHasMixedFinishes(row.original) ? "Varies by finish" : row.original.preferredPriceLabel,
-      },
+      } satisfies ColumnDef<InventoryRow>] : []),
       {
         accessorKey: "foilStatus",
         header: "Foil",
@@ -2574,6 +2583,7 @@ export function InventoryBrowser({
       capabilities.canViewPrivateSourceInfo,
       capabilities.canViewVisibility,
       canShowPublicOwnerIdentity,
+      showPricing,
       displayMode,
       selectionAvailable,
       isRowSelected,
@@ -3279,7 +3289,7 @@ export function InventoryBrowser({
                         {h.column.getCanSort() && (INVENTORY_SORT_FIELDS as readonly string[]).includes(h.column.id) ? (
                           <a
                             className="inline-flex w-full items-center gap-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
-                            href={inventorySortHref(uiMode === "public-readonly" ? "/public/inventory" : "/inventory",
+                            href={inventorySortHref(sortActionPath || (uiMode === "public-readonly" ? "/public/inventory" : "/inventory"),
                               pageHrefBase || "", h.column.id, h.column.getNextSortingOrder())}
                             onClick={(event) => {
                               if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -3560,6 +3570,7 @@ export function InventoryBrowser({
       {resumeHandoff&&<CardHandoffDialog itemIds={[]} cardName="Pending handoff" onClose={()=>setResumeHandoff(false)} onSuccess={message=>{setResumeHandoff(false);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
       {selected ? (
         <CardDetail
+          showPricing={showPricing}
           key={selected.id}
           row={renderedRows.find((row) => row.id === selected.id) ?? selected}
           onClose={() => setSelected(null)}
