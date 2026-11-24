@@ -48,6 +48,21 @@ import {
   requireLeaguePrinting,
 } from "@/lib/commander-league-inventory";
 
+import { syncCommittedDeckPrintings } from "@/lib/deck-committed-printings";
+
+export async function matchCommittedDeckPrintings(fd: FormData) {
+  const deckId = formString(fd, "deckId");
+  const { deck } = await requireManagedDeck(deckId);
+  await prisma.$transaction(async tx => {
+    await lockWritableDeck(tx, deckId, deck.ownerUserId);
+    const current = await tx.deck.findUniqueOrThrow({ where: { id: deckId }, include: { ownerUser: true, commanderLeagueDeck: true } });
+    if (current.commanderLeagueDeck || !current.ownerUser.playerId) throw new Error("Use a personal deck with an inventory owner.");
+    await syncCommittedDeckPrintings(tx, deckId, current.ownerUser.playerId);
+  }, { isolationLevel: "Serializable", timeout: 60000 });
+  revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/decks");
+}
+
 function formString(fd: FormData, name: string) {
   return String(fd.get(name) || "").trim();
 }

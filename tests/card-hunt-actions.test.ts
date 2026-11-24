@@ -139,7 +139,17 @@ test("pending confirmations retain the same request across reload and malformed 
   assert(!verifiedHuntOutcome({ ...result, quantity: 1 }, input));
   assert(!verifiedHuntOutcome({ ...result, entries: 2 }, input));
   assert(!verifiedHuntOutcome({ ...result, stockUpdates: [null] }, input));
+  assert(verifiedHuntOutcome({ ...result, targetUpdates: [{ requestId: "a", stamp: "c".repeat(64) }] }, input));
+  assert(!verifiedHuntOutcome({ ...result, targetUpdates: [null] }, input));
   assert(!verifiedHuntOutcome({}, input));
+});
+test("partial commits refresh destination revisions so remaining pulls need no rebuild", () => {
+  const plan = planCardHunt({ ownerId: "owner", mode: "preferences", finish: "ANY", requests: [{ id: "a", name: "Card", quantity: 4, targetStamp: "b".repeat(64) }], stock: [stock] });
+  const result: HuntActionResult = { requestId: randomUUID(), status: "APPLIED", action: "COMMIT", quantity: 1, entries: 1, message: "Committed", destinations: [{ name: "Deck", quantity: 1 }], handoffIds: [], stockUpdates: [{ id: "lot", stamp: "c".repeat(64) }], targetUpdates: [{ requestId: "a", stamp: "d".repeat(64) }] };
+  const next = advanceHunt(plan, [{ requestId: "a", inventoryItemId: "lot", quantity: 1 }], result);
+  assert.equal(next.boxes[0].picks[0].targetStamp, "d".repeat(64));
+  assert.equal(next.lines[0].request.targetStamp, "d".repeat(64));
+  assert.equal(next.boxes[0].picks[0].quantity, 3);
 });
 test("combined sources are explicit, bounded and cannot repeat a deck or source identity", () => {
   assert(cardHuntInput.safeParse(hunt).success);
