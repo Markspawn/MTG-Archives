@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type DeckCard } from "@prisma/client";
 import { buildCardHunt, type CardHuntInput } from "../lib/card-hunt-service";
 import {
   performHuntAction,
@@ -851,7 +851,7 @@ async function main() {
     console.log("Hunt actions SQL PASS: historical printing repair changes no inventory/history, mixed quantities/notes/sections conserved, idempotent repair, consecutive partial commits without rebuild, same-printing row reuse and exact replay");
     const basicsDeck = await db.deck.create({ data: { ownerUserId: f.owner, name: "Masters of Evil regression" } });
     const basicsLocation = await db.$transaction(tx => ensureDeckLocation(tx, { ...basicsDeck, ownerUser: { playerId: f.owner } }));
-    const basicsRows = [];
+    const basicsRows: Array<{ row: DeckCard; offset: number }> = [];
     for (const [name, number] of [["Island", 198], ["Mountain", 202], ["Swamp", 200]] as const) {
       const oracle = randomUUID();
       for (const offset of [0, 1]) {
