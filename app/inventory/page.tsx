@@ -528,7 +528,9 @@ export default async function InventoryPage({
     );
     const selectionMode = String(fd.get("selectionMode") || "selected");
     const reason = String(fd.get("reason") || "Bulk location move.");
-    const sourceLocationIdRaw = String(fd.get("sourceLocationId") || "");
+    // The page's Unassigned value describes a filtered pool, not a location ID.
+    // Resolve the extra source fence from the authoritative page filters.
+    const sourceLocationIdRaw = singleInventoryLocationId(filters) ?? "";
     let itemIds: string[] = [];
     try {
       itemIds = JSON.parse(String(fd.get("itemIds") || "[]")) as string[];
@@ -1241,7 +1243,11 @@ export default async function InventoryPage({
             initialBrowsingMode={initialBrowsingMode}
             initialSortField={String(sortField)}
             initialSortDirection={sortDirection}
-            currentLocationId={singleInventoryLocationId(filters)}
+            currentLocationId={
+              selected("locationId").length === 1
+                ? selected("locationId")[0]
+                : ""
+            }
             onBulkMoveLocation={onBulkMoveLocation}
             onBulkDeleteInventory={onBulkDeleteInventory}
             onMoveInventoryCopies={onMoveInventoryCopies}
