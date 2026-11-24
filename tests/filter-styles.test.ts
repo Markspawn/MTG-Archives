@@ -21,7 +21,7 @@ const inventoryBrowser = readFileSync(
 );
 const inventoryPage = readFileSync("app/inventory/page.tsx", "utf8");
 const publicInventoryPage = readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 const deckListEditor = readFileSync("components/DeckListEditor.tsx", "utf8");
@@ -91,7 +91,7 @@ test("inventory pages render quick search outside advanced search", () => {
   );
   assert.match(
     publicInventoryPage,
-    /<InventoryWorkspace[\s\S]*?<InventoryQuickCardNameSearch[\s\S]*?actionPath="\/public\/inventory"[\s\S]*?<InventoryAdvancedSearch/,
+    /<InventoryWorkspace[\s\S]*?<InventoryQuickCardNameSearch[\s\S]*?actionPath=\{actionPath\}[\s\S]*?<InventoryAdvancedSearch/,
   );
 });
 

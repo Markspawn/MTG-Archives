@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const globalPublicInventoryPage = fs.readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 const inventoryBrowser = fs.readFileSync(
@@ -19,12 +19,12 @@ const publicCollectionQueries = fs.readFileSync(
   "utf8",
 );
 const publicInventoryPage = fs.readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 
 const publicInventoryListApi = fs.readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 const publicInventoryActions = fs.readFileSync(
@@ -127,10 +127,10 @@ test("grouped public inventory aggregates location breakdown across all printing
   );
 });
 
-test("public inventory drawers show every public owner location outside the active filters", () => {
+test("public inventory drawers ignore card filters while preserving personalized owner scope", () => {
   assert.match(
     publicCollectionQueries,
-    /allPublicInventory[\s\S]*buildPublicInventoryWhere\(\{\}\)/,
+    /allPublicInventory[\s\S]*buildPublicInventoryWhere\(scope \? \{ owner: scope\.ownerPlayerId \} : \{\}\)/,
   );
   assert.match(globalPublicInventoryPage, /result\.allPublicInventory/);
   assert.match(globalPublicInventoryPage, /drawerLocationBreakdown/);

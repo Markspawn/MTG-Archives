@@ -31,7 +31,7 @@ const inventoryListApi = fs.readFileSync(
   "utf8",
 );
 const publicInventoryListApi = fs.readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 

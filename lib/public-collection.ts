@@ -359,7 +359,9 @@ const publicInventoryInclude = {
 
 export async function getGlobalPublicInventory(
   filters: PublicInventoryFilters = {},
+  scope?: { ownerPlayerId: string },
 ) {
+  if (scope) filters = { ...filters, owner: scope.ownerPlayerId };
   const pageSizeOptions = [10, 25, 50, 100, 250];
   const pageSize = pageSizeOptions.includes(Number(filters.pageSize))
     ? Number(filters.pageSize)
@@ -400,7 +402,7 @@ export async function getGlobalPublicInventory(
     orderBy: [{ cardId: "asc" }] as any,
   };
   const ownerPlayerIds = publicFilterValues(filters.owner).filter(Boolean);
-  const publicOwnerInventoryWhere = buildPublicInventoryWhere({});
+  const publicOwnerInventoryWhere = buildPublicInventoryWhere(scope ? { owner: scope.ownerPlayerId } : {});
   const publicLocationInventoryWhere = buildPublicInventoryWhere(
     ownerPlayerIds.length ? { owner: ownerPlayerIds } : {},
   );
@@ -500,7 +502,7 @@ export async function getGlobalPublicInventory(
         }),
         prisma.inventoryItem.findMany({
           where: {
-            ...buildPublicInventoryWhere({}),
+            ...buildPublicInventoryWhere(scope ? { owner: scope.ownerPlayerId } : {}),
             cardId: { in: pageCardIds },
           },
           include: publicInventoryInclude,

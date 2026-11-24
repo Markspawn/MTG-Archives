@@ -31,6 +31,7 @@ export type InventoryAdvancedSearchCapabilities = {
   showInventoryScopeFilter: boolean;
   showLocationFilter: boolean;
   showScryfallQuery: boolean;
+  showPriceFilter: boolean;
 };
 
 type InventoryAdvancedSearchProps = {
@@ -1152,6 +1153,7 @@ export function InventoryAdvancedSearch({
     showInventoryScopeFilter: !isPublic,
     showLocationFilter: true,
     showScryfallQuery: true,
+    showPriceFilter: true,
     ...capabilityOverrides,
   };
   const rarity = values(params, "rarity");
@@ -1467,7 +1469,7 @@ export function InventoryAdvancedSearch({
                   label="Color ID"
                   ariaLabel="Color identity"
                 />
-                <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
+                {capabilities.showPriceFilter ? <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
                   <span className={filterLabelClass}>Mana value</span>
                   <select
                     name="mvOp"
@@ -1677,7 +1679,7 @@ export function InventoryAdvancedSearch({
                     </select>
                   </label>
                 ) : null}
-                <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
+                {capabilities.showPriceFilter ? <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100 transition-colors focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
                   <span className={filterLabelClass}>USD</span>
                   <input
                     name="priceMin"
@@ -1697,7 +1699,7 @@ export function InventoryAdvancedSearch({
                     placeholder="Max"
                     className={cn(filterInputClass, "w-24")}
                   />
-                </div>
+                </div> : null}
               </div>
             </section>
           </div>

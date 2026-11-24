@@ -4,7 +4,7 @@ import test from "node:test";
 
 const publicNav = readFileSync("components/PublicNav.tsx", "utf8");
 const publicHome = readFileSync("app/public/page.tsx", "utf8");
-const publicInventory = readFileSync("app/public/inventory/page.tsx", "utf8");
+const publicInventory = readFileSync("components/PublicInventoryPage.tsx", "utf8");
 const publicDecks = readFileSync("app/public/decks/page.tsx", "utf8");
 
 test("public navigation uses the authenticated app nav for signed-in viewers", () => {
