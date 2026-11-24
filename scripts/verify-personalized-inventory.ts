@@ -23,6 +23,7 @@ export async function seedPersonalizedInventory(tag: string) {
   await prisma.card.create({ data: { id: `${tag}-other-only`, scryfallId: `${tag}-other-only`, name: `${tag} OtherExclusive`, setCode: "oth", collectorNumber: "1", rarity: "rare", typeLine: "Artifact" } });
   await prisma.inventoryItem.create({ data: { condition: "NM", id: `${tag}-other-exclusive`, cardId: `${tag}-other-only`, currentOwnerId: `${tag}-other`, originalOpenerId: `${tag}-other`, locationId: `${tag}-other-public`, quantity: 10 } });
   await prisma.inventoryItem.create({ data: { condition: "NM", id: `${tag}-private-item`, cardId: `${tag}-card-0`, currentOwnerId: `${tag}-shop`, originalOpenerId: `${tag}-shop`, locationId: `${tag}-shop-private`, quantity: 100 } });
+  await prisma.inventoryItem.create({ data: { condition: "NM", id: `${tag}-private-only-item`, cardId: `${tag}-card-0`, currentOwnerId: `${tag}-empty`, locationId: `${tag}-empty-private`, quantity: 3 } });
   return { username: `${tag}-shop`, other: `${tag}-other`, special: `${tag}/ #~%2F`, empty: `${tag}-empty`, inactive: `${tag}-inactive`, password, tag };
 }
 
@@ -54,8 +55,8 @@ async function verify() {
     assert(general.inventory.some(i => i.currentOwnerId === f.other));
     assert.equal(await getPublicInventoryMember(f.inactive), null);
     assert.equal(await getPublicInventoryMember("missing-"+tag), null);
-    const empty = await getPublicInventoryMember(f.empty); assert(empty);
-    assert.equal((await getGlobalPublicInventory({}, empty)).totalMatchingCount, 0);
+    assert.equal(await getPublicInventoryMember(f.empty), null);
+    assert.equal((await getGlobalPublicInventory({ cardName: "missing-"+tag }, member)).totalMatchingCount, 0);
     await prisma.user.update({ where: { username: f.username }, data: { publicInventoryHidePricing: true } });
     assert.equal((await getPublicInventoryMember(f.username))?.hidePricing, true);
     console.log("Storefront SQL PASS: owner override, exact/grouped pages, drawer companions, owner/location metadata, visibility, empty/inactive and saved preference");
