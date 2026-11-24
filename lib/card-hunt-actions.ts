@@ -7,6 +7,7 @@ import { giveInventoryCardInTransaction, HandoffError } from "./card-handoffs";
 import {
   huntActionInput,
   huntActionHash,
+  selectedHuntDeckRows,
   type HuntActionInput,
   type HuntActionResult,
 } from "./card-hunt-action-policy";
@@ -141,17 +142,37 @@ async function apply(
       "A selected deck is unavailable or no longer belongs to you.",
       409,
     );
-  await lockDeckRows(tx, deckIds);
+  const targets = selectedHuntDeckRows(input);
+  const targetDeckIds = [
+    ...new Set(targets.map((target) => target.deckId)),
+  ].sort();
+  await lockDeckRows(tx, targetDeckIds);
+  if (targets.length) {
+    const pairs = [
+      ...new Map(
+        targets.map((target) => [JSON.stringify(target), target]),
+      ).values(),
+    ];
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM "DeckCard" WHERE ${Prisma.join(
+        pairs.map(
+          (target) =>
+            Prisma.sql`("deckId"=${target.deckId} AND id=${target.rowId})`,
+        ),
+        " OR ",
+      )} ORDER BY id FOR UPDATE`,
+    );
+  }
   const decks = await tx.deck.findMany({
     where: {
-      id: { in: deckIds },
+      id: { in: targetDeckIds },
       ownerUserId: userId,
       commanderLeagueDeck: null,
     },
     include: { ownerUser: { select: { playerId: true } } },
   });
   if (
-    decks.length !== deckIds.length ||
+    decks.length !== targetDeckIds.length ||
     decks.some((deck) => deck.ownerUser.playerId !== actor.playerId)
   )
     throw new CardHuntError(
@@ -252,7 +273,15 @@ async function apply(
         "A selected printing no longer matches its requested card. Refresh the hunt.",
         409,
       );
-    if (line.request.deckId && line.request.targetStamp !== move.targetStamp)
+    if (
+      line.request.deckId &&
+      (line.request.targetStamp !== move.targetStamp ||
+        !targets.some(
+          (target) =>
+            target.deckId === line.request.deckId &&
+            target.rowId === line.request.deckCardId,
+        ))
+    )
       throw new CardHuntError(
         "A destination deck row changed. Refresh the hunt.",
         409,

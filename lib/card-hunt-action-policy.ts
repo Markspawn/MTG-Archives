@@ -39,6 +39,34 @@ export const huntActionInput = z
       ctx.addIssue({ code: "custom", message: "Choose each pull only once." });
   });
 export type HuntActionInput = z.infer<typeof huntActionInput>;
+// This decodes the planner's namespace; fresh server-side row matching remains
+// the authorization check. It never grants access to a client-supplied target.
+export function selectedHuntDeckRows(input: HuntActionInput) {
+  if (input.hunt.deckId)
+    return input.selected.map((move) => ({
+      deckId: input.hunt.deckId!,
+      rowId: move.requestId,
+    }));
+  const sources = new Map(
+    input.hunt.sources?.flatMap((source) =>
+      source.kind === "DECK" ? [[source.id, source.deckId] as const] : [],
+    ) ?? [],
+  );
+  return input.selected.flatMap((move) => {
+    try {
+      const pair = JSON.parse(move.requestId);
+      const deckId =
+        Array.isArray(pair) && typeof pair[0] === "string"
+          ? sources.get(pair[0])
+          : undefined;
+      return deckId && pair.length === 2 && typeof pair[1] === "string"
+        ? [{ deckId, rowId: pair[1] }]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
 export function huntActionHash(input: HuntActionInput) {
   const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return handoffHash({

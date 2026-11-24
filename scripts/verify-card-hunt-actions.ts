@@ -360,7 +360,7 @@ async function main() {
         side: "PROPOSER",
         deckId: f.deckB.id,
         snapshotJson: { synthetic: true },
-        snapshotDigest: "fixture",
+        snapshotDigest: "a".repeat(64),
       },
     });
     const withBundle = await fingerprint(db);
@@ -463,6 +463,82 @@ async function main() {
     );
     assert((await performHuntAction(db, f.owner, commit)).replay);
     assert.equal((await fresh(f.ring.id)).quantity, 2);
+    // A reserved, unselected deck must not block or be touched by another pull.
+    const extra = await db.card.create({
+      data: {
+        id: f.tag + "-extra",
+        scryfallId: randomUUID(),
+        oracleId: randomUUID(),
+        name: "Extra " + f.tag,
+        setCode: "tst",
+        collectorNumber: "4",
+        typeLine: "Artifact",
+        rarity: "common",
+      },
+    });
+    const deckC = await db.deck.create({
+      data: { id: f.tag + "-deck-c", ownerUserId: f.owner, name: "Deck C" },
+    });
+    await db.deckCard.create({
+      data: {
+        deckId: deckC.id,
+        cardId: extra.id,
+        oracleId: extra.oracleId,
+        cardName: extra.name,
+        quantity: 1,
+      },
+    });
+    await db.inventoryItem.create({
+      data: {
+        currentOwnerId: f.owner,
+        cardId: extra.id,
+        quantity: 1,
+        condition: "NM",
+        locationId: f.box.id,
+      },
+    });
+    const aReserved = await db.tradeDeckBundle.create({
+      data: {
+        tradeId: f.trade.id,
+        side: "PROPOSER",
+        deckId: f.deckA.id,
+        snapshotJson: { synthetic: true },
+        snapshotDigest: "b".repeat(64),
+      },
+    });
+    const aLocation = await db.inventoryLocation.findUniqueOrThrow({
+      where: { deckId: f.deckA.id },
+    });
+    const ac: CardHuntInput = {
+      ...f.hunt,
+      sources: [
+        { kind: "DECK", id: "a", deckId: f.deckA.id },
+        { kind: "DECK", id: "c", deckId: deckC.id },
+      ],
+    };
+    const cPicks = (await build(ac)).boxes
+      .flatMap((box) => box.picks)
+      .filter((pick) => pick.deckId === deckC.id);
+    const preC = (await totals())._sum.quantity;
+    assert.equal(
+      (
+        await performHuntAction(db, f.owner, {
+          requestId: randomUUID(),
+          action: "COMMIT",
+          hunt: ac,
+          selected: selected(cPicks),
+        })
+      ).status,
+      "APPLIED",
+    );
+    assert.equal((await totals())._sum.quantity, preC);
+    assert.deepEqual(
+      await db.inventoryLocation.findUniqueOrThrow({
+        where: { id: aLocation.id },
+      }),
+      aLocation,
+    );
+    await db.tradeDeckBundle.delete({ where: { id: aReserved.id } });
     console.log(
       "Hunt actions SQL PASS: additive combined demand, shared storage once, deck-specific committed subtraction, external history, exact replay, alternate printing and lot provenance conservation",
     );

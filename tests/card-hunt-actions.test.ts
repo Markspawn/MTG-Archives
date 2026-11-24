@@ -5,6 +5,7 @@ import { cardHuntInput } from "../lib/card-hunt-service";
 import {
   huntActionInput,
   huntActionHash,
+  selectedHuntDeckRows,
   type HuntActionResult,
 } from "../lib/card-hunt-action-policy";
 import { advanceHunt, huntPickKey } from "../lib/card-hunt-progress";
@@ -48,6 +49,45 @@ const hunt = {
   includeMaybeboard: false,
   ignoreBasicLands: false,
 };
+test("selected deck targets decode only the planner's configured deck namespace", () => {
+  const input = huntActionInput.parse({
+    requestId: randomUUID(),
+    action: "COMMIT",
+    hunt,
+    selected: [
+      {
+        requestId: JSON.stringify(["b", "row-b"]),
+        inventoryItemId: "lot",
+        quantity: 1,
+        stamp: "a".repeat(64),
+      },
+    ],
+  });
+  assert.deepEqual(selectedHuntDeckRows(input), [
+    { deckId: "deck-b", rowId: "row-b" },
+  ]);
+  for (const requestId of [
+    JSON.stringify(["c", "row"]),
+    JSON.stringify(["foreign", "row"]),
+    JSON.stringify(["a", "row", "extra"]),
+    "invalid",
+  ])
+    assert.deepEqual(
+      selectedHuntDeckRows({
+        ...input,
+        selected: [{ ...input.selected[0], requestId }],
+      }),
+      [],
+    );
+  assert.deepEqual(
+    selectedHuntDeckRows({
+      ...input,
+      hunt: { ...input.hunt, sources: undefined, deckId: "legacy" },
+      selected: [{ ...input.selected[0], requestId: "raw-row" }],
+    }),
+    [{ deckId: "legacy", rowId: "raw-row" }],
+  );
+});
 test("pending confirmations retain the same request across reload and malformed or partial acknowledgements cannot clear it", () => {
   const input = huntActionInput.parse({
     requestId: randomUUID(),
