@@ -346,7 +346,7 @@ async function main() {
     assert(picks.every((pick) => pick.inventoryItemId === f.ring.id));
     assert.deepEqual(await fingerprint(db), before);
     assert.equal(new Set(picks.map((pick) => pick.sourceLabel)).size, 3);
-    assert(picks.every((pick) => pick.stamp.length === 64));
+    assert(picks.every((pick) => pick.stamp?.length === 64));
     const bOriginal = picks.filter((pick) => pick.deckId === f.deckB.id),
       blockedCommit: HuntActionInput = {
         requestId: randomUUID(),
