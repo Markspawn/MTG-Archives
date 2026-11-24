@@ -323,239 +323,11 @@ export async function giveInventoryCard(
   actor: HandoffActor,
   raw: unknown,
 ) {
-  const input = handoffInput.parse(raw),
-    requestHash = handoffHash(input);
+  const input = handoffInput.parse(raw);
   for (let attempt = 0; ; attempt++)
     try {
       return await db.$transaction(
-        async (tx) => {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${actor.userId + ":" + input.requestId}, 231123))`;
-          await tx.$queryRaw`SELECT id FROM "User" WHERE id=${actor.userId} FOR SHARE`;
-          const access = await actorFor(tx, actor);
-          const replay = await tx.cardHandoff.findUnique({
-            where: {
-              actorUserId_requestId: {
-                actorUserId: actor.userId,
-                requestId: input.requestId,
-              },
-            },
-          });
-          if (replay) {
-            if (replay.requestHash !== requestHash)
-              throw new HandoffError(
-                "This confirmation was already used for a different handoff. Open a new one.",
-              );
-            if (!access.admin && replay.fromPlayerId !== access.user.playerId)
-              throw new HandoffError("This handoff is unavailable.");
-            return {
-              id: replay.id,
-              recipientName: replay.recipientName,
-              quantity: replay.quantity,
-              internal: Boolean(replay.toPlayerId),
-              replay: true,
-            };
-          }
-          // Deck stock is never changed by this workflow, so no deck-owner lock is
-          // needed. Recheck the fresh location after taking the shared stock lock.
-          await tx.$queryRaw`SELECT id FROM "InventoryItem" WHERE id=${input.inventoryItemId} FOR UPDATE`;
-          const source = await tx.inventoryItem.findUnique({
-            where: { id: input.inventoryItemId },
-            include: {
-              location: true,
-              currentOwner: true,
-              card: {
-                select: {
-                  name: true,
-                  setCode: true,
-                  collectorNumber: true,
-                  imageUri: true,
-                },
-              },
-            },
-          });
-          if (!source)
-            throw new HandoffError(
-              "This inventory is no longer available. Reopen the card to review its current copies.",
-              409,
-              true,
-            );
-          if (!access.admin && source.currentOwnerId !== access.user.playerId)
-            throw new HandoffError(
-              "This inventory is unavailable or belongs to another person.",
-            );
-          const blocked = unavailable(source.location);
-          if (blocked) throw new HandoffError(blocked);
-          if (handoffStamp(source) !== input.expectedStamp)
-            throw new HandoffError(
-              "This card changed. Reopen the handoff to review the current copies.",
-              409,
-              true,
-            );
-          const holds = await reserved(tx, [source.id]);
-          if (input.quantity > source.quantity - (holds.get(source.id) ?? 0))
-            throw new HandoffError(
-              "That many unreserved copies are no longer available.",
-            );
-          let recipientName: string,
-            toPlayerId: string | null = null,
-            receivedInventoryItemId: string | null = null;
-          let destinationId: string | null = null;
-          if (input.recipient.type === "ARCHIVE") {
-            toPlayerId = input.recipient.playerId;
-            if (toPlayerId === source.currentOwnerId)
-              throw new HandoffError(
-                "Choose another person. Use Move to reorganize your own cards.",
-              );
-            await tx.$queryRaw`SELECT id FROM "Player" WHERE id=${toPlayerId} FOR SHARE`;
-            const recipient = await tx.player.findFirst({
-              where: {
-                id: toPlayerId,
-                active: true,
-                users: { some: { isActive: true } },
-              },
-            });
-            if (!recipient)
-              throw new HandoffError(
-                "That Archive recipient is no longer active.",
-              );
-            recipientName = recipient.displayName;
-            // Serialize default creation even when the recipient has no locations.
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${toPlayerId}, 231124))`;
-            const location = await ensureDefaultLocation(tx, toPlayerId);
-            await lockInventoryDestinations(tx, [location.id]);
-            const fresh = await tx.inventoryLocation.findUniqueOrThrow({
-              where: { id: location.id },
-            });
-            if (
-              !fresh.active ||
-              fresh.kind !== "NORMAL" ||
-              fresh.systemManaged ||
-              fresh.ownerPlayerId !== toPlayerId ||
-              fresh.parentLocationId ||
-              fresh.normalizedName !== "unassigned"
-            )
-              throw new HandoffError(
-                "The recipient's Unassigned location is unavailable. Ask them to restore it first.",
-              );
-            destinationId = fresh.id;
-          } else recipientName = input.recipient.name;
-          const snapshot = {
-            card: { id: source.cardId, ...source.card },
-            lot: {
-              cardId: source.cardId,
-              originalOpenerId: source.originalOpenerId,
-              foilStatus: source.foilStatus,
-              condition: source.condition,
-              language: source.language,
-              notes: source.notes,
-              sourceType: source.sourceType,
-              roundId: source.roundId,
-              acquiredFromPullId: source.acquiredFromPullId,
-            },
-            source: {
-              inventoryItemId: source.id,
-              ownerPlayerId: source.currentOwnerId,
-              locationId: source.locationId,
-              locationName: source.location?.name ?? "Unassigned",
-              section: source.locationSection,
-            },
-            destination: {
-              locationId: destinationId,
-              name: toPlayerId ? "Unassigned" : null,
-            },
-            quantity: input.quantity,
-          };
-          const receipt = await tx.cardHandoff.create({
-            data: {
-              actorUserId: actor.userId,
-              requestId: input.requestId,
-              requestHash,
-              fromPlayerId: source.currentOwnerId,
-              toPlayerId,
-              senderName: source.currentOwner.displayName,
-              recipientName,
-              kind: input.kind,
-              cardId: source.cardId,
-              cardName: source.card.name,
-              quantity: input.quantity,
-              sourceInventoryItemId: source.id,
-              snapshot,
-            },
-          });
-          const after = await tx.inventoryItem.update({
-            where: { id: source.id },
-            data: { quantity: { decrement: input.quantity } },
-          });
-          const reason = `${input.kind === "TRADE" ? "Traded away" : "Given"} ${input.quantity} ${source.card.name} to ${recipientName}.`;
-          const metadata = {
-            handoffId: receipt.id,
-            quantityGiven: input.quantity,
-            recipientName,
-            recipientPlayerId: toPlayerId,
-          };
-          await recordInventoryAudit({
-            tx,
-            action: "card_given_away",
-            actingUserId: actor.userId,
-            inventoryItemId: source.id,
-            before: {
-              ...snapshot.lot,
-              currentOwnerId: source.currentOwnerId,
-              quantity: source.quantity,
-              locationId: source.locationId,
-            },
-            after: {
-              ...snapshot.lot,
-              currentOwnerId: source.currentOwnerId,
-              quantity: after.quantity,
-              locationId: source.locationId,
-            },
-            metadata,
-            reason,
-          });
-          if (toPlayerId && destinationId) {
-            const data = receivedTradeInventoryData(
-              source,
-              input.quantity,
-              toPlayerId,
-              destinationId,
-            );
-            const received = await writeInventoryReceipt(tx, {
-              lot: data,
-              merge: null,
-              audit: {
-                action: "card_received",
-                actingUserId: actor.userId,
-                reason,
-                metadata: {
-                  handoffId: receipt.id,
-                  senderName: source.currentOwner.displayName,
-                  quantityReceived: input.quantity,
-                },
-              },
-            });
-            receivedInventoryItemId = received.inventory.id;
-            await tx.cardHandoff.update({
-              where: { id: receipt.id },
-              data: { receivedInventoryItemId },
-            });
-            await fulfillCompletedTradeWishlists(tx, {
-              proposerPlayerId: source.currentOwnerId,
-              receiverPlayerId: toPlayerId,
-              offeredCards: [
-                { cardId: source.cardId, quantity: input.quantity },
-              ],
-              requestedCards: [],
-            });
-          }
-          return {
-            id: receipt.id,
-            recipientName,
-            quantity: input.quantity,
-            internal: Boolean(toPlayerId),
-            replay: false,
-          };
-        },
+        (tx) => giveInventoryCardInTransaction(tx, actor, input),
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           timeout: 20000,
@@ -575,4 +347,237 @@ export async function giveInventoryCard(
       }
       throw error;
     }
+}
+
+/** Caller must own the enclosing serializable transaction and shared lock order. */
+export async function giveInventoryCardInTransaction(
+  tx: Db,
+  actor: HandoffActor,
+  raw: unknown,
+) {
+  const input = handoffInput.parse(raw),
+    requestHash = handoffHash(input);
+
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${actor.userId + ":" + input.requestId}, 231123))`;
+  await tx.$queryRaw`SELECT id FROM "User" WHERE id=${actor.userId} FOR SHARE`;
+  const access = await actorFor(tx, actor);
+  const replay = await tx.cardHandoff.findUnique({
+    where: {
+      actorUserId_requestId: {
+        actorUserId: actor.userId,
+        requestId: input.requestId,
+      },
+    },
+  });
+  if (replay) {
+    if (replay.requestHash !== requestHash)
+      throw new HandoffError(
+        "This confirmation was already used for a different handoff. Open a new one.",
+      );
+    if (!access.admin && replay.fromPlayerId !== access.user.playerId)
+      throw new HandoffError("This handoff is unavailable.");
+    return {
+      id: replay.id,
+      recipientName: replay.recipientName,
+      quantity: replay.quantity,
+      internal: Boolean(replay.toPlayerId),
+      replay: true,
+    };
+  }
+  // Deck stock is never changed by this workflow, so no deck-owner lock is
+  // needed. Recheck the fresh location after taking the shared stock lock.
+  await tx.$queryRaw`SELECT id FROM "InventoryItem" WHERE id=${input.inventoryItemId} FOR UPDATE`;
+  const source = await tx.inventoryItem.findUnique({
+    where: { id: input.inventoryItemId },
+    include: {
+      location: true,
+      currentOwner: true,
+      card: {
+        select: {
+          name: true,
+          setCode: true,
+          collectorNumber: true,
+          imageUri: true,
+        },
+      },
+    },
+  });
+  if (!source)
+    throw new HandoffError(
+      "This inventory is no longer available. Reopen the card to review its current copies.",
+      409,
+      true,
+    );
+  if (!access.admin && source.currentOwnerId !== access.user.playerId)
+    throw new HandoffError(
+      "This inventory is unavailable or belongs to another person.",
+    );
+  const blocked = unavailable(source.location);
+  if (blocked) throw new HandoffError(blocked);
+  if (handoffStamp(source) !== input.expectedStamp)
+    throw new HandoffError(
+      "This card changed. Reopen the handoff to review the current copies.",
+      409,
+      true,
+    );
+  const holds = await reserved(tx, [source.id]);
+  if (input.quantity > source.quantity - (holds.get(source.id) ?? 0))
+    throw new HandoffError(
+      "That many unreserved copies are no longer available.",
+    );
+  let recipientName: string,
+    toPlayerId: string | null = null,
+    receivedInventoryItemId: string | null = null;
+  let destinationId: string | null = null;
+  if (input.recipient.type === "ARCHIVE") {
+    toPlayerId = input.recipient.playerId;
+    if (toPlayerId === source.currentOwnerId)
+      throw new HandoffError(
+        "Choose another person. Use Move to reorganize your own cards.",
+      );
+    await tx.$queryRaw`SELECT id FROM "Player" WHERE id=${toPlayerId} FOR SHARE`;
+    const recipient = await tx.player.findFirst({
+      where: {
+        id: toPlayerId,
+        active: true,
+        users: { some: { isActive: true } },
+      },
+    });
+    if (!recipient)
+      throw new HandoffError("That Archive recipient is no longer active.");
+    recipientName = recipient.displayName;
+    // Serialize default creation even when the recipient has no locations.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${toPlayerId}, 231124))`;
+    const location = await ensureDefaultLocation(tx, toPlayerId);
+    await lockInventoryDestinations(tx, [location.id]);
+    const fresh = await tx.inventoryLocation.findUniqueOrThrow({
+      where: { id: location.id },
+    });
+    if (
+      !fresh.active ||
+      fresh.kind !== "NORMAL" ||
+      fresh.systemManaged ||
+      fresh.ownerPlayerId !== toPlayerId ||
+      fresh.parentLocationId ||
+      fresh.normalizedName !== "unassigned"
+    )
+      throw new HandoffError(
+        "The recipient's Unassigned location is unavailable. Ask them to restore it first.",
+      );
+    destinationId = fresh.id;
+  } else recipientName = input.recipient.name;
+  const snapshot = {
+    card: { id: source.cardId, ...source.card },
+    lot: {
+      cardId: source.cardId,
+      originalOpenerId: source.originalOpenerId,
+      foilStatus: source.foilStatus,
+      condition: source.condition,
+      language: source.language,
+      notes: source.notes,
+      sourceType: source.sourceType,
+      roundId: source.roundId,
+      acquiredFromPullId: source.acquiredFromPullId,
+    },
+    source: {
+      inventoryItemId: source.id,
+      ownerPlayerId: source.currentOwnerId,
+      locationId: source.locationId,
+      locationName: source.location?.name ?? "Unassigned",
+      section: source.locationSection,
+    },
+    destination: {
+      locationId: destinationId,
+      name: toPlayerId ? "Unassigned" : null,
+    },
+    quantity: input.quantity,
+  };
+  const receipt = await tx.cardHandoff.create({
+    data: {
+      actorUserId: actor.userId,
+      requestId: input.requestId,
+      requestHash,
+      fromPlayerId: source.currentOwnerId,
+      toPlayerId,
+      senderName: source.currentOwner.displayName,
+      recipientName,
+      kind: input.kind,
+      cardId: source.cardId,
+      cardName: source.card.name,
+      quantity: input.quantity,
+      sourceInventoryItemId: source.id,
+      snapshot,
+    },
+  });
+  const after = await tx.inventoryItem.update({
+    where: { id: source.id },
+    data: { quantity: { decrement: input.quantity } },
+  });
+  const reason = `${input.kind === "TRADE" ? "Traded away" : "Given"} ${input.quantity} ${source.card.name} to ${recipientName}.`;
+  const metadata = {
+    handoffId: receipt.id,
+    quantityGiven: input.quantity,
+    recipientName,
+    recipientPlayerId: toPlayerId,
+  };
+  await recordInventoryAudit({
+    tx,
+    action: "card_given_away",
+    actingUserId: actor.userId,
+    inventoryItemId: source.id,
+    before: {
+      ...snapshot.lot,
+      currentOwnerId: source.currentOwnerId,
+      quantity: source.quantity,
+      locationId: source.locationId,
+    },
+    after: {
+      ...snapshot.lot,
+      currentOwnerId: source.currentOwnerId,
+      quantity: after.quantity,
+      locationId: source.locationId,
+    },
+    metadata,
+    reason,
+  });
+  if (toPlayerId && destinationId) {
+    const data = receivedTradeInventoryData(
+      source,
+      input.quantity,
+      toPlayerId,
+      destinationId,
+    );
+    const received = await writeInventoryReceipt(tx, {
+      lot: data,
+      merge: null,
+      audit: {
+        action: "card_received",
+        actingUserId: actor.userId,
+        reason,
+        metadata: {
+          handoffId: receipt.id,
+          senderName: source.currentOwner.displayName,
+          quantityReceived: input.quantity,
+        },
+      },
+    });
+    receivedInventoryItemId = received.inventory.id;
+    await tx.cardHandoff.update({
+      where: { id: receipt.id },
+      data: { receivedInventoryItemId },
+    });
+    await fulfillCompletedTradeWishlists(tx, {
+      proposerPlayerId: source.currentOwnerId,
+      receiverPlayerId: toPlayerId,
+      offeredCards: [{ cardId: source.cardId, quantity: input.quantity }],
+      requestedCards: [],
+    });
+  }
+  return {
+    id: receipt.id,
+    recipientName,
+    quantity: input.quantity,
+    internal: Boolean(toPlayerId),
+    replay: false,
+  };
 }

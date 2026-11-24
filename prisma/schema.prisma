@@ -165,6 +165,7 @@ model User {
   updatedAt                    DateTime                            @updatedAt
   inventoryAuditLogs           InventoryAuditLog[]
   cardHandoffs                  CardHandoff[]
+  cardHuntActions               CardHuntAction[]
   importBatches                ImportBatch[]
   importResolutionJobs         ImportResolutionJob[]
   createdTrades                Trade[]                             @relation("TradeCreatedBy")
@@ -1019,6 +1020,21 @@ model CardHandoff {
   @@index([fromPlayerId, createdAt, id])
   @@index([toPlayerId, createdAt, id])
   @@index([fromPlayerId, cardId, createdAt])
+}
+
+model CardHuntAction {
+  id              String   @id @default(cuid())
+  actorUserId     String
+  actorUser       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  ownerPlayerId   String
+  requestId       String
+  requestHash     String
+  action          String
+  resultJson      Json
+  createdAt       DateTime @default(now())
+
+  @@unique([actorUserId, requestId])
+  @@index([actorUserId, createdAt])
 }
 
 model InventoryAuditLog {
