@@ -48,8 +48,9 @@ in administrator mode. Owner IDs supplied by clients are ignored. The endpoint
 uses a repeatable-read snapshot and private/no-store responses. A plan is not a
 promise of future availability; rebuild it when inventory or trades change.
 
-The planning body is bounded at128KB, text at100,000characters total and1,000combinedcard lines.
-Individual quantities must be whole numbers from1to1,000,000. This bounds one
+The planning body is bounded at 128 KB, text at 100,000 characters total and
+combined hunts at 1,000 card lines. Legacy single-source requests retain their
+500-line bound. Individual quantities must be whole numbers from 1 to 1,000,000. This bounds one
 planning request, not collection size. Results page boxes/lines and progressively
 show large box contents. Shortages and parsing notes remain visible. Pull selections
 and editable quantities survive filtering, box paging and progressive expansion
