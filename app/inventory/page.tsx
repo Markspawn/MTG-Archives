@@ -63,6 +63,7 @@ import {
   constrainInventoryWhereToPostFilters,
   inventoryCardMatchesPostFilters,
   parseInventoryFilters,
+  singleInventoryLocationId,
   INVENTORY_FILTER_PARAM_KEYS,
 } from "@/lib/inventory-filters";
 import { constrainInventoryWhereToScryfallQuery } from "@/lib/inventory-scryfall-query";
@@ -1240,11 +1241,7 @@ export default async function InventoryPage({
             initialBrowsingMode={initialBrowsingMode}
             initialSortField={String(sortField)}
             initialSortDirection={sortDirection}
-            currentLocationId={
-              selected("locationId").length === 1
-                ? selected("locationId")[0]
-                : ""
-            }
+            currentLocationId={singleInventoryLocationId(filters)}
             onBulkMoveLocation={onBulkMoveLocation}
             onBulkDeleteInventory={onBulkDeleteInventory}
             onMoveInventoryCopies={onMoveInventoryCopies}
