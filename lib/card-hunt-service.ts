@@ -305,6 +305,8 @@ export async function buildCardHunt(
       : `Combined hunt (${sourceTitles.length} decks/lists)`;
   if (!requests.length && !input.card)
     throw new CardHuntError("Add at least one card to hunt.");
+  if (!input.sources && requests.length > 500)
+    throw new CardHuntError("Use up to 500 card lines in a single-source hunt.");
   if (
     requests.length > 1000 ||
     requests.some(
