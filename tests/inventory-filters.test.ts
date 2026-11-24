@@ -18,7 +18,8 @@ import {
 
 test("bulk actions fence a single concrete location, while virtual Unassigned retains its full filtered pool", () => {
   for (const query of ["locationId=unassigned", "location=unassigned", "hasLocation=unassigned", "locationId=box&locationId=unassigned", "locationId=box,unassigned"]) {
-    const filters = parseInventoryFilters(new URLSearchParams(query + "&color=U"));
+    const filters = parseInventoryFilters(new URLSearchParams(query + "&colors=U"));
+    assert.deepEqual(filters.colors, ["U"]);
     assert.equal(singleInventoryLocationId(filters), undefined, query);
     const where = buildInventoryWhereFromFilters(filters, { adminModeActive: false, playerId: "owner" });
     assert.equal(where.currentOwnerId, "owner");
