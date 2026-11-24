@@ -34,6 +34,25 @@ export function CardHandoffDialog({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
+  const [huntPending, setHuntPending] = useState(false);
+  useEffect(() => {
+    if (!options) return;
+    const check = () => {
+      try {
+        setHuntPending(
+          Boolean(
+            sessionStorage.getItem(
+              "mtg-card-hunt-action:" + options.actorUserId,
+            ),
+          ),
+        );
+      } catch {}
+    };
+    check();
+    window.addEventListener("mtg-card-hunt-action-pending", check);
+    return () =>
+      window.removeEventListener("mtg-card-hunt-action-pending", check);
+  }, [options]);
   const requestId = useRef<string | null>(null);
   const lot = options?.lots.find((l) => l.id === source);
   const sourceKey = JSON.stringify(itemIds);
@@ -101,7 +120,7 @@ export function CardHandoffDialog({
     };
   }, [sourceKey]);
   async function submit() {
-    if (busy || !options) return;
+    if (busy || !options || (huntPending && !pending)) return;
     const recipient =
       type === "ARCHIVE"
         ? { type: "ARCHIVE" as const, playerId: player }
@@ -180,7 +199,7 @@ export function CardHandoffDialog({
       setBusy(false);
     }
   }
-  const disabled = busy || Boolean(pending);
+  const disabled = busy || Boolean(pending) || huntPending;
   return (
     <dialog
       ref={dialog}
@@ -205,6 +224,14 @@ export function CardHandoffDialog({
         </button>
       </div>
       <p className="mt-2 font-semibold">{pending?.cardName ?? cardName}</p>
+      {huntPending && !pending && (
+        <p role="status" className="mt-3 rounded border border-amber-600 p-3">
+          A Card Hunt confirmation needs verification first.{" "}
+          <a href="/card-hunt" className="underline">
+            Open Card Hunt to check it.
+          </a>
+        </p>
+      )}
       {error && (
         <p role="alert" className="mt-3 rounded border border-red-600 p-3">
           {error}
@@ -369,6 +396,7 @@ export function CardHandoffDialog({
               className={filterPrimaryButtonClass}
               disabled={
                 busy ||
+                (huntPending && !pending) ||
                 (!pending &&
                   (!lot || Boolean(lot.blocked) || lot.available < 1))
               }
