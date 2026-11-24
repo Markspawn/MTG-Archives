@@ -72,7 +72,7 @@ test("inventory pages expose shared location type filters", async () => {
     await Promise.all([
       readFile("components/InventoryAdvancedSearch.tsx", "utf8"),
       readFile("app/inventory/page.tsx", "utf8"),
-      readFile("app/public/inventory/page.tsx", "utf8"),
+      readFile("components/PublicInventoryPage.tsx", "utf8"),
     ]);
 
   assert.match(advancedSearch, /locationTypes\?: FilterOption\[\]/);

@@ -10,7 +10,7 @@ const migration = readFileSync(
 );
 const publicInventory = readFileSync("lib/public-collection.ts", "utf8");
 const publicInventoryPage = readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 

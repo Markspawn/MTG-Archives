@@ -71,6 +71,19 @@ export default async function SettingsPage({
   }
   const scope = await getAccessScope(user);
   const adminModeActive = scope?.mode === "admin";
+  async function updatePublicInventoryPricing(fd: FormData) {
+    "use server";
+    const actor = await requireLogin();
+    const hidePricing = fd.get("hidePricing") === "on";
+    await prisma.$transaction(async tx => {
+      const before = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { publicInventoryHidePricing: true } });
+      await tx.user.update({ where: { id: actor.id }, data: { publicInventoryHidePricing: hidePricing } });
+      await tx.inventoryAuditLog.create({ data: { changedByUserId: actor.id, changeType: "public_inventory_pricing_updated", beforeJson: { publicInventoryHidePricing: before.publicInventoryHidePricing }, afterJson: { publicInventoryHidePricing: hidePricing } } });
+    });
+    revalidatePath(publicInventoryLink(actor.username));
+    revalidatePath("/settings");
+    redirect("/settings?inventorySharingSaved=1#public-inventory-sharing");
+  }
   async function updatePublicWishlist(fd: FormData) {
     "use server";
     const actor = await requireLogin();
@@ -243,6 +256,8 @@ export default async function SettingsPage({
             ["pricing", "Pricing"],
             ["notifications", "Notifications"],
             ["collection", "Collection"],
+            ["public-inventory-sharing", "Inventory sharing"],
+            ["public-wishlist-sharing", "Wishlist sharing"],
           ].map(([id, label]) => (
             <a key={id} href={`#${id}`} className={filterButtonClass}>
               {label}
@@ -480,13 +495,6 @@ export default async function SettingsPage({
               </p>
             </div>
 
-            {user.playerId ? (
-              <PublicShareLink
-                href={publicInventoryLink(user.username)}
-                label="Your public inventory"
-              />
-            ) : null}
-
             <label className="block text-sm">
               Public display name
               <input
@@ -566,6 +574,18 @@ export default async function SettingsPage({
           </SubmitButton>
         </div>
       </form>
+      {user.playerId ? <section id="public-inventory-sharing" aria-labelledby="public-inventory-sharing-heading" className="space-y-3 rounded border border-[var(--app-border)] p-4">
+        <h2 id="public-inventory-sharing-heading" className="text-xl font-semibold">Public Inventory sharing</h2>
+        <p className="text-sm app-muted">Your personalized link stays on your collection. Share it directly or use it as the destination for your store’s QR code.</p>
+        <PublicShareLink href={publicInventoryLink(user.username)} label="Your public inventory" />
+        {params.inventorySharingSaved === "1" && <p role="status">Inventory sharing saved.</p>}
+        <form action={updatePublicInventoryPricing} className="space-y-3">
+          <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="hidePricing" defaultChecked={user.publicInventoryHidePricing} />Hide pricing on my personalized inventory page</label>
+          <p className="text-sm app-muted">Removes prices from the table, column choices and card details on this link. Your private Inventory pricing stays available.</p>
+          <SubmitButton pendingLabel="Saving…" className={filterPrimaryButtonClass}>Save Inventory sharing</SubmitButton>
+        </form>
+      </section>
+      : null}
       <section id="public-wishlist-sharing" aria-labelledby="public-wishlist-sharing-heading" className="space-y-3 rounded border border-[var(--app-border)] p-4">
         <h2 id="public-wishlist-sharing-heading" className="text-xl font-semibold">Public Wishlist sharing</h2>
         <p className="text-sm app-muted">Choose which categories to share. All categories start private; leave every box unchecked to share none.</p>

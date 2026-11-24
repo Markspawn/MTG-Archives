@@ -1,7 +1,7 @@
 import { INVENTORY_SORT_FIELDS } from "../lib/inventory-sort";
 
 export function inventorySortHref(
-  pathname: "/inventory" | "/public/inventory",
+  pathname: string,
   query: string,
   field: string,
   direction: "asc" | "desc" | false,

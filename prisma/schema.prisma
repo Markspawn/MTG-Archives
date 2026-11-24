@@ -159,6 +159,7 @@ model User {
   inventoryDefaultVisibility   DefaultCollectionVisibility         @default(PRIVATE)
   deckDefaultVisibility        DefaultCollectionVisibility         @default(PRIVATE)
   publicDisplayName            String?
+  publicInventoryHidePricing   Boolean                             @default(false)
   publicWishlistCategories     String[]                            @default([])
   createdAt                    DateTime                            @default(now())
   updatedAt                    DateTime                            @updatedAt
