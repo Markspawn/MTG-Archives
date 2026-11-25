@@ -541,6 +541,7 @@ export function buildRestoreCredentialFence(schema: string) {
     `IF to_regclass(${literal(table(name))}) IS NOT NULL THEN ${action}; END IF;`;
   const body = `BEGIN
 ${statement("AuthSession", `DELETE FROM ${table("AuthSession")}`)}
+${statement("ScanConnectorGrant", `UPDATE ${table("ScanConnectorGrant")} SET "revokedAt" = CURRENT_TIMESTAMP WHERE "revokedAt" IS NULL`)}
 ${statement("ScannerPairing", `DELETE FROM ${table("ScannerPairing")}`)}
 ${statement("ScannerAgent", `UPDATE ${table("ScannerAgent")} SET "revokedAt" = CURRENT_TIMESTAMP WHERE "revokedAt" IS NULL`)}
 END;`;

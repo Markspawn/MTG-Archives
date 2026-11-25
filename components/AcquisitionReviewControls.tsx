@@ -910,6 +910,8 @@ export function AcquisitionPhotoReview({
               ? "Added to Inventory"
               : draftDirty
                 ? "Unsaved correction · save or cancel changes"
+              : record.review?.source === "CHATGPT_CONNECTOR"
+                ? "Confirmed by ChatGPT · correct below if needed"
               : record.review?.source === "AUTO_STRONG_MATCH"
                 ? "Automatically confirmed · correct below if needed"
                 : record.review

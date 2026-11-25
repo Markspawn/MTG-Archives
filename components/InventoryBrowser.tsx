@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { CardHunt } from "./CardHunt";
+import { CardHandoffDialog } from "./CardHandoffDialog";
 import { INVENTORY_SORT_FIELDS } from "@/lib/inventory-sort";
 import { inventorySortHref } from "./inventorySortNavigation";
 import { StorageDestinationPicker } from "./StorageDestinationPicker";
@@ -203,7 +204,8 @@ export type InventoryRow = {
     | "CORRECTION"
     | "PRIZE"
     | "OTHER";
-  effectiveVisibility?: "PRIVATE" | "PUBLIC";
+  effectiveVisibility?: "PRIVATE" | "PUBLIC" | "MIXED";
+  sourceTypeLabel?: string;
   locationVisibility?: "PRIVATE" | "PUBLIC" | "INHERIT";
   oracleText?: string;
   powerToughness?: string;
@@ -409,7 +411,7 @@ function getRowSourceIds(row: InventoryRow) {
 function inventoryRowControlName(row: InventoryRow) {
   const printing = `${row.setCode.toUpperCase()} #${row.collectorNumber || "?"}`;
   if (row.rollupPrinting)
-    return [row.cardName, printing, row.currentOwner].filter(Boolean).join(", ");
+    return [row.cardName, printing, row.foilStatus, row.currentOwner].filter(Boolean).join(", ");
   const finish = row.foilStatus ||
     (row.displayMode === "exact" ? (row.foil ? "FOIL" : "NONFOIL") : null);
   return [
@@ -485,7 +487,7 @@ function SelectedCopyInput({ row, value, onChange, compact = false }: {
 }
 
 function friendlyVisibility(value?: InventoryRow["effectiveVisibility"]) {
-  return value === "PUBLIC" ? "Public" : "Private";
+  return value === "MIXED" ? "Mixed" : value === "PUBLIC" ? "Public" : "Private";
 }
 
 function friendlySource(value?: InventoryRow["sourceType"]) {
@@ -770,11 +772,13 @@ function InventoryDetailPanel({
   capabilities,
   visibleLocationBreakdown,
   priceLabel,
+  showPricing,
 }: {
   row: InventoryRow;
   capabilities: InventoryCapabilities;
   visibleLocationBreakdown: InventoryLocationStack[];
   priceLabel: string;
+  showPricing: boolean;
 }) {
   return (
     <section className={detailBlockClass}>
@@ -785,10 +789,10 @@ function InventoryDetailPanel({
             <div className="text-xs uppercase text-zinc-500">Quantity</div>
             {row.quantity}
           </div>
-          <div>
+          {showPricing ? <div>
             <div className="text-xs uppercase text-zinc-500">Price</div>
             {priceLabel}
-          </div>
+          </div> : null}
           {!row.rollupPrinting ? (
             <div>
               <div className="text-xs uppercase text-zinc-500">Condition</div>
@@ -1182,7 +1186,9 @@ function CardDetail({
   onEdit,
   onAudit,
   onDelete,
+  onGive,
   canHunt,
+  showPricing,
 }: {
   row: InventoryRow;
   onClose: () => void;
@@ -1194,7 +1200,9 @@ function CardDetail({
   onEdit?: () => void;
   onAudit?: () => void;
   onDelete?: () => Promise<void>;
+  onGive?: () => void;
   canHunt: boolean;
+  showPricing: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const huntButton = useRef<HTMLButtonElement>(null);
@@ -1456,6 +1464,7 @@ function CardDetail({
               </div>
             </details>
           ) : null}
+          {onGive ? <button type="button" onClick={onGive} className={cn(filterPrimaryButtonClass,"px-2 py-1")}>Give / trade away</button> : null}
           {capabilities.canEdit && onEdit ? (
             <button
               onClick={onEdit}
@@ -1505,8 +1514,9 @@ function CardDetail({
             capabilities={capabilities}
             visibleLocationBreakdown={visibleLocationBreakdown}
             priceLabel={priceLabel}
+            showPricing={showPricing}
           />
-          {capabilities.canViewPrivateSourceInfo ? (
+          {showPricing && capabilities.canViewPrivateSourceInfo ? (
             mixedFinishes ? (
               Array.from(new Set(row.locationBreakdown?.map((stack) => stack.foilStatus))).map(
                 (finish) => (
@@ -1669,6 +1679,8 @@ export function InventoryBrowser({
   hasNextPage = false,
   hasPreviousPage = false,
   pageHrefBase,
+  sortActionPath,
+  showPricing = true,
   infiniteApiPath,
   initialPageSize,
   initialBrowsingMode,
@@ -1687,6 +1699,7 @@ export function InventoryBrowser({
   onAddToDeck,
   importExportHref,
   huntOwnerId,
+  handoffActorUserId,
 }: {
   rows: InventoryRow[];
   storageLocations?: StorageLocation[];
@@ -1704,6 +1717,8 @@ export function InventoryBrowser({
   hasNextPage?: boolean;
   hasPreviousPage?: boolean;
   pageHrefBase?: string;
+  sortActionPath?: string;
+  showPricing?: boolean;
   infiniteApiPath?: string;
   initialPageSize: number;
   initialBrowsingMode: "paginated" | "infinite";
@@ -1751,6 +1766,7 @@ export function InventoryBrowser({
   onAddToDeck?: (formData: FormData) => Promise<void>;
   importExportHref?: string;
   huntOwnerId?: string;
+  handoffActorUserId?: string;
 }) {
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>(
@@ -1759,6 +1775,16 @@ export function InventoryBrowser({
       : [],
   );
   const [selected, setSelected] = useState<InventoryRow | null>(null);
+  const [handoffRow,setHandoffRow]=useState<InventoryRow|null>(null);
+  const [handoffMessage,setHandoffMessage]=useState("");
+  const [resumeHandoff,setResumeHandoff]=useState(false);
+  const [pendingHandoff,setPendingHandoff]=useState(false);
+  useEffect(()=>{
+    if(!handoffActorUserId)return;
+    const check=()=>{try{setPendingHandoff(Boolean(sessionStorage.getItem("mtg-card-handoff:"+handoffActorUserId)));}catch{setPendingHandoff(false);}};
+    check();window.addEventListener("mtg-card-handoff-pending",check);
+    return()=>window.removeEventListener("mtg-card-handoff-pending",check);
+  },[handoffActorUserId]);
   const [editing, setEditing] = useState<InventoryRow | null>(null);
   const [auditRow, setAuditRow] = useState<InventoryRow | null>(null);
   const auditRequest = useRef(0);
@@ -2448,12 +2474,12 @@ export function InventoryBrowser({
           <ColorIdentityIcons value={row.original.colorIdentity} />
         ),
       },
-      {
+      ...(showPricing ? [{
         accessorKey: "preferredPriceLabel",
-        header: "Preferred Price",
+        header: () => <span title="Unit price for this finish and your selected source. Different currencies sort separately; missing prices stay last.">Preferred Price</span>,
         cell: ({ row }) =>
           printingHasMixedFinishes(row.original) ? "Varies by finish" : row.original.preferredPriceLabel,
-      },
+      } satisfies ColumnDef<InventoryRow>] : []),
       {
         accessorKey: "foilStatus",
         header: "Foil",
@@ -2481,7 +2507,7 @@ export function InventoryBrowser({
                   (stack) => stack.sourceType !== row.original.sourceType,
                 )
                   ? "Mixed"
-                  : friendlySource(row.original.sourceType),
+                  : row.original.sourceTypeLabel ?? friendlySource(row.original.sourceType),
             } satisfies ColumnDef<InventoryRow>,
           ]
         : []),
@@ -2522,6 +2548,7 @@ export function InventoryBrowser({
                           Edit inventory
                         </button>
                       ) : null}
+                      {capabilities.canMove ? <button type="button" className="w-full rounded px-2 py-1 text-left text-xs hover:bg-zinc-900" onClick={()=>setHandoffRow(row.original)}>Give / trade away</button> : null}
                       {capabilities.canDelete ? (
                         <button
                           type="button"
@@ -2553,9 +2580,11 @@ export function InventoryBrowser({
     [
       capabilities.canDelete,
       capabilities.canEdit,
+      capabilities.canMove,
       capabilities.canViewPrivateSourceInfo,
       capabilities.canViewVisibility,
       canShowPublicOwnerIdentity,
+      showPricing,
       displayMode,
       selectionAvailable,
       isRowSelected,
@@ -2632,6 +2661,7 @@ export function InventoryBrowser({
           {message}
         </div>
       ) : null}
+      {handoffActorUserId&&pendingHandoff&&!handoffRow&&!resumeHandoff&&<div role="status" className="rounded border border-amber-600 p-3"><p>An earlier handoff needs verification before you give more cards.</p><button type="button" className={cn(filterButtonClass,"mt-2")} onClick={()=>setResumeHandoff(true)}>Check pending handoff</button></div>}
       {isAdmin ? (
         <div className="border border-sky-800 bg-sky-950/40 text-sky-200 p-2 text-sm">
           Admin edit mode is active. Use the Actions column in Table View, or
@@ -3260,7 +3290,7 @@ export function InventoryBrowser({
                         {h.column.getCanSort() && (INVENTORY_SORT_FIELDS as readonly string[]).includes(h.column.id) ? (
                           <a
                             className="inline-flex w-full items-center gap-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
-                            href={inventorySortHref(uiMode === "public-readonly" ? "/public/inventory" : "/inventory",
+                            href={inventorySortHref(sortActionPath || (uiMode === "public-readonly" ? "/public/inventory" : "/inventory"),
                               pageHrefBase || "", h.column.id, h.column.getNextSortingOrder())}
                             onClick={(event) => {
                               if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -3426,8 +3456,8 @@ export function InventoryBrowser({
                     <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-2 py-0.5 rounded">
                       x{row.quantity}
                     </span>
-                    {(printingHasMixedFinishes(row) || (row.foilStatus && row.foilStatus !== "NONFOIL")) ? (
-                      <span className="absolute top-1 left-1 bg-amber-400 text-black text-[10px] px-1 rounded">
+                    {(printingHasMixedFinishes(row) || row.foilStatus) ? (
+                      <span className="absolute top-1 left-7 bg-amber-400 text-black text-[10px] px-1 rounded">
                         {printingHasMixedFinishes(row) ? "Mixed finishes" : row.foilStatus}
                       </span>
                     ) : null}
@@ -3536,8 +3566,12 @@ export function InventoryBrowser({
         </div>
       )}
 
+      {handoffMessage&&<div role="status" className="fixed bottom-4 right-4 z-[80] max-w-[calc(100%-2rem)] rounded border border-emerald-600 bg-[var(--app-surface)] p-4 shadow-xl sm:max-w-md"><p>{handoffMessage}</p><div className="mt-2 flex gap-4"><a href="/inventory/handoffs" className="underline">View history</a><button type="button" onClick={()=>setHandoffMessage("")}>Dismiss</button></div></div>}
+      {handoffRow&&<CardHandoffDialog itemIds={getRowSourceIds(handoffRow)} cardName={handoffRow.cardName} onClose={()=>setHandoffRow(null)} onSuccess={message=>{setHandoffRow(null);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
+      {resumeHandoff&&<CardHandoffDialog itemIds={[]} cardName="Pending handoff" onClose={()=>setResumeHandoff(false)} onSuccess={message=>{setResumeHandoff(false);setSelected(null);setHandoffMessage(message);router.refresh();}}/>}
       {selected ? (
         <CardDetail
+          showPricing={showPricing}
           key={selected.id}
           row={renderedRows.find((row) => row.id === selected.id) ?? selected}
           onClose={() => setSelected(null)}
@@ -3547,6 +3581,7 @@ export function InventoryBrowser({
           deckTargets={deckTargets}
           onAddToDeck={onAddToDeck}
           canHunt={huntOwnerId === selected.currentOwnerId}
+          onGive={capabilities.canMove&&selected.displayMode==="exact"?()=>{setHandoffRow(selected);setSelected(null);}:undefined}
           onEdit={
             capabilities.canEdit && selected.displayMode === "exact"
               ? () => {

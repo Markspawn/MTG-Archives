@@ -14,8 +14,9 @@ Evidence abbreviations: **I** = InventoryBrowser, InventoryAdvancedSearch and in
 | `/` | Brand / landing | Signed-in versus anonymous entry | app/page.tsx; entry smoke |
 | `/dashboard` | Overview | Current-user dashboard; League entry | app/dashboard/page.tsx; launch links |
 | `/inventory` | Collection / Inventory | Owner scope; deliberate admin mode; capability-gated actions | I; inventory-detail, inventory-color-filter, inventory-scryfall-query |
+| `/inventory/handoffs` | Collection / Inventory / Gifts and traded-away history | Own outgoing/received receipts, named external people, immediate Archive-user Unassigned delivery; other owners require Admin Mode | card-handoff SQL and desktop/phone checks |
 | `/collector` | Collection / Collector | Read-only current-owner English paper set completion, including deck commitments and reserved copies; grouped cards or printing/finish variants; tokens excluded and complete provider catalog required | collector units; verify-collector PostgreSQL conservation; desktop/phone Collector review |
-| `/card-hunt` | Build & trade / Card Hunt | Own personal deck or pasted-list read-only storage plan; excludes deck commitments and trade reservations; finish/printing preference and box optimization | card-hunt planner tests; verify-card-hunt PostgreSQL controls; desktop/phone author review |
+| `/card-hunt` | Build & trade / Card Hunt | Own decks and named pasted lists, additive storage plan; explicit selected-copy deck commit or named/Archive handoff; deck/stock/reservation fences and durable same-confirmation recovery | planner/action controls; verify-card-hunt and verify-card-hunt-actions PostgreSQL controls; shared handoff regression; desktop/phone author review |
 | `/locations` | Collection / Locations | Owner tree; authorized owner controls; system/deck location limits | L; location-hierarchy, location-scale, vault-map |
 | `/imports` | Collection / Add / Import / Export | Own capture/review/history; restricted maintenance and undo | M; inventory-export and import units |
 | `/imports/scan` | Collection / Imports / Scan cards | Owned photo batches and private camera/library intake; explicit Admin Mode | Acquisition photo intake tests |
@@ -34,9 +35,12 @@ Evidence abbreviations: **I** = InventoryBrowser, InventoryAdvancedSearch and in
 | `/pricing/digest/[observedDate]` | Pricing / dated digest | Signed-in recipient only; validated UTC date and owned notification payload | digest page; pricing-digest |
 | `/public` | Public browsing / home | Anonymous/public visibility; signed-in navigation differences | PublicNav; public browse smoke |
 | `/public/inventory` | Public browsing / inventory | No owner/admin edits; eligible signed-in other-owner trade-wishlist action remains | public inventory page/actions, I; trade-wishlist, inventory-detail |
+| `/public/inventory/[username]` | Personalized public collection | Route-resolved owner stays fixed; existing visibility applies; owner-controlled pricing presentation; no owner/admin Inventory edits | shared public Inventory renderer, scoped list/suggestions, personalized-inventory-scope and SQL/browser checks |
 | `/public/wishlist/[username]` | Public browsing / member Wishlist | Owner-selected categories, none shared by default; public-safe names/quantities/printing-finish preferences only; same anonymous/signed-in boundary | public-wishlist projection/URL tests; disposable PostgreSQL and desktop/phone sharing checks |
 | `/public/decks` | Public browsing / decks | Read-only library, folders/tags/views; authorized shared deck tools | DeckWorkspace; public/private deck checks |
 | `/settings` | Account & settings / profile & preferences | Own identity/appearance/pricing/sharing/categories; explicit save | settings page; settings-themes |
+| `/settings/connections` | Account & settings / Connections | Own ChatGPT grants, setup and revocation; optional installation enablement | scan-connector policy, PostgreSQL and HTTPS browser controls |
+| `/settings/connections/authorize` | Account & settings / Connections / Consent | Signed-in OAuth consent; separate confirmation permission; all-user scope requires administrator and explicit Admin Mode | scan-connector policy, PostgreSQL and HTTPS browser controls |
 | `/settings/email` | Account & settings / Notifications / Email | Own address/preferences/test/history; global SMTP availability | email page; email-settings |
 | `/settings/webhooks` | Account & settings / Notifications / Webhooks | Own masked destinations; private-network choice restricted | webhook page; webhook-settings |
 | `/settings/pricing-alerts` | Account & settings / Pricing alerts | Signed-in user's opt-in and thresholds; owner link required before enabling | pricing alerts page; pricing-digest |

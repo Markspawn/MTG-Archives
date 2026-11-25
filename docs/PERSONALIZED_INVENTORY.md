@@ -1,0 +1,9 @@
+# Personalized public Inventory
+
+Share the username link copied from **Settings → Public Inventory sharing**, for example `/public/inventory/brian`. It can also be used as the destination of a printed QR code. The page remains scoped to that account during searches, sorting, filter clearing, pagination and infinite scrolling. Visitors cannot select another owner on this page; changing query parameters cannot override the route owner. Exact/grouped card details and suggestions use the same scope. Unknown/inactive accounts and accounts without publicly shared inventory show a not-found page; their scoped APIs return HTTP 404. Streaming HTML may already have sent HTTP 200 before rendering the not-found page. Filters matching no cards show an empty collection without falling back to other owners.
+
+The owner can enable **Hide pricing on my personalized inventory page** and save. Prices then disappear from table columns, column choices, card details and the personalized page/list payload. Price range controls and price sorting are omitted. The default is to show pricing, preserving existing accounts' presentation. This setting applies to this personalized view; ordinary Inventory and the general public browser keep their existing behavior. Public market prices are not confidential data.
+
+Existing collection, deck and location visibility still governs every result. The change grants no new public access and does not alter quantities, reservations, decks or trades. Public Wishlist category choices are unchanged. Old `/public/inventory?owner=...` links continue to use the general public browser; use the username link for a scoped store/collection view.
+
+Deployment uses the ordinary image update and additive `20261124020000_personalized_inventory_pricing` migration. No environment or Compose changes are required.

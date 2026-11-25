@@ -31,7 +31,7 @@ const inventoryListApi = fs.readFileSync(
   "utf8",
 );
 const publicInventoryListApi = fs.readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 
@@ -197,7 +197,7 @@ test("full-dataset client-safe filters run before paging", () => {
     /groupInventoryPageGroupsByCardName\(/,
   );
   assert.match(
-    inventoryPage + inventoryListApi + publicInventoryQueries,
+    inventoryPage + inventoryListApi + publicInventoryQueries + fs.readFileSync("lib/inventory-page-groups.ts", "utf8"),
     /group\.cardIds \?\? \[group\.cardId\]/,
   );
   assert.match(inventoryPage, /isInventoryLocationSort\(String\(sortField\)\)/);

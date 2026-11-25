@@ -7,6 +7,7 @@ import {
   inventoryCardMatchesPostFilters,
   matchesColors,
   parseInventoryFilters,
+  singleInventoryLocationId,
   removeInventoryFilterParams,
 } from "../lib/inventory-filters";
 import {
@@ -14,6 +15,22 @@ import {
   extractTypeLineTokensFromCard,
   suggestionScopeSearchParams,
 } from "../lib/inventory-filter-suggestions";
+
+test("bulk moves fence a single concrete location, while virtual Unassigned retains its full filtered pool", () => {
+  for (const query of ["locationId=unassigned", "location=unassigned", "hasLocation=unassigned", "locationId=box&locationId=unassigned", "locationId=box,unassigned"]) {
+    const filters = parseInventoryFilters(new URLSearchParams(query + "&colors=U"));
+    assert.deepEqual(filters.colors, ["U"]);
+    assert.equal(singleInventoryLocationId(filters), undefined, query);
+    const where = buildInventoryWhereFromFilters(filters, { adminModeActive: false, playerId: "owner" });
+    assert.equal(where.currentOwnerId, "owner");
+    assert(JSON.stringify(where).includes('"locationId":null'));
+    assert(JSON.stringify(where).includes('"normalizedName":"unassigned"'));
+  }
+  assert.equal(singleInventoryLocationId(parseInventoryFilters(new URLSearchParams("locationId=box"))), "box");
+  assert.equal(singleInventoryLocationId(parseInventoryFilters(new URLSearchParams("location=box"))), "box");
+  assert.equal(singleInventoryLocationId(parseInventoryFilters(new URLSearchParams("locationId=a&locationId=b"))), undefined);
+  assert.equal(singleInventoryLocationId(parseInventoryFilters(new URLSearchParams())), undefined);
+});
 
 test("scan source filter maps to acquisition receipts", () => {
   assert.deepEqual(
@@ -236,14 +253,17 @@ test("all-matching mutations constrain database candidates to post-filtered card
         return [
           {
             cardId: "matching-white-card",
+            foilStatus: "NONFOIL",
             card: { colors: ["W"], keywords: ["Flying"] },
           },
           {
             cardId: "nonmatching-blue-card",
+            foilStatus: "NONFOIL",
             card: { colors: ["U"], keywords: ["Flying"] },
           },
           {
             cardId: "nonmatching-white-card",
+            foilStatus: "NONFOIL",
             card: { colors: ["W"], keywords: ["Vigilance"] },
           },
         ];
@@ -258,11 +278,8 @@ test("all-matching mutations constrain database candidates to post-filtered card
   );
 
   assert.equal(receivedArgs.where, where);
-  assert.deepEqual(receivedArgs.distinct, ["cardId"]);
-  assert.deepEqual(constrained, {
-    ...where,
-    cardId: { in: ["matching-white-card"] },
-  });
+  assert.deepEqual(receivedArgs.distinct, ["cardId", "foilStatus"]);
+  assert.deepEqual(constrained, { AND: [where, { OR: [{ cardId: "matching-white-card", foilStatus: "NONFOIL" }] }] });
 });
 
 test("all-matching mutations preserve database-only filters without extra lookup", async () => {

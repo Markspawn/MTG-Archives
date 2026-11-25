@@ -51,6 +51,7 @@
     "worker:acquisition": "tsx scripts/acquisition-worker.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@prisma/client": "^6.9.0",
     "@tanstack/react-table": "^8.20.5",
     "bcryptjs": "^2.4.3",

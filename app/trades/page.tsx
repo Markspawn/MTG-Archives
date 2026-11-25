@@ -1201,6 +1201,7 @@ export default async function TradesPage({
 
       {tradeView === "history" ? (
         <section className="app-panel min-w-0 space-y-3 p-4" aria-label="Trade history controls">
+          <Link href="/inventory/handoffs" className="inline-block underline">Gifts and traded-away cards · including people outside Archive</Link>
           <form key={JSON.stringify(params)} className="flex min-w-0 flex-wrap items-end gap-3">
             <input type="hidden" name="view" value="history" />
             <label className="min-w-full flex-1 text-sm sm:min-w-0">Search trade history

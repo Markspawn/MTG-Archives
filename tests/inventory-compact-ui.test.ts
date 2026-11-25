@@ -18,11 +18,11 @@ const inventoryListRoute = readFileSync(
   "utf8",
 );
 const publicInventoryPage = readFileSync(
-  "app/public/inventory/page.tsx",
+  "components/PublicInventoryPage.tsx",
   "utf8",
 );
 const publicInventoryListRoute = readFileSync(
-  "app/api/public/inventory/list/route.ts",
+  "lib/public-inventory-response.ts",
   "utf8",
 );
 const inventorySort = readFileSync("lib/inventory-sort.ts", "utf8");
@@ -191,7 +191,7 @@ test("inventory advanced search separates mechanical and collection filters", ()
   );
   assert.match(
     inventoryAdvancedSearch,
-    /Collection and storage[\s\S]*<span className=\{filterLabelClass\}>USD<\/span>/,
+    /Collection and storage[\s\S]*<span className=\{filterLabelClass\} title="Scryfall USD unit price for the selected finish">Scryfall USD<\/span>/,
   );
   assert.doesNotMatch(inventoryAdvancedSearch, /Color, mana, and price/);
   assert.match(inventoryAdvancedSearch, /grid items-end gap-3/);

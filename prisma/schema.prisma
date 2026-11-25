@@ -135,6 +135,7 @@ enum NotificationDeliveryAttemptStatus {
 }
 
 model User {
+  scanConnectorGrants          ScanConnectorGrant[]
   scannerAgents                ScannerAgent[]
   scannerPairings              ScannerPairing[]
   acquisitionSessions          AcquisitionSession[]
@@ -158,10 +159,18 @@ model User {
   inventoryDefaultVisibility   DefaultCollectionVisibility         @default(PRIVATE)
   deckDefaultVisibility        DefaultCollectionVisibility         @default(PRIVATE)
   publicDisplayName            String?
+  publicInventoryHidePricing   Boolean                             @default(false)
+  bulkCleanupEnabled           Boolean                             @default(false)
+  bulkCleanupMaxCopies         Int                                 @default(4)
+  bulkCleanupIncludeDecks       Boolean                             @default(false)
+  bulkCleanupRevision          Int                                 @default(0)
+  bulkCleanupActions           BulkCleanupAction[]
   publicWishlistCategories     String[]                            @default([])
   createdAt                    DateTime                            @default(now())
   updatedAt                    DateTime                            @updatedAt
   inventoryAuditLogs           InventoryAuditLog[]
+  cardHandoffs                  CardHandoff[]
+  cardHuntActions               CardHuntAction[]
   importBatches                ImportBatch[]
   importResolutionJobs         ImportResolutionJob[]
   createdTrades                Trade[]                             @relation("TradeCreatedBy")
@@ -185,6 +194,42 @@ model User {
 
   @@index([isActive, inventoryDefaultVisibility])
   @@index([isActive, deckDefaultVisibility])
+}
+
+model ScanConnectorGrant {
+  id          String @id @default(uuid())
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes      String[]
+  securityKey String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  codes       ScanConnectorCode[]
+  tokens      ScanConnectorToken[]
+  @@index([userId, createdAt])
+}
+
+model ScanConnectorCode {
+  hash        String @id
+  grantId     String
+  grant       ScanConnectorGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  redirectUri String
+  challenge   String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  @@index([grantId])
+}
+
+model ScanConnectorToken {
+  hash        String @id
+  scopes      String[]
+  refreshHash String @unique
+  grantId     String
+  grant       ScanConnectorGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  rotatedAt   DateTime?
+  @@index([grantId])
 }
 
 model ScannerPairing {
@@ -316,6 +361,8 @@ model Player {
   inventoryOwned              InventoryItem[]                     @relation("InventoryCurrentOwner")
   inventoryOpened             InventoryItem[]                     @relation("InventoryOriginalOpener")
   inventoryLocations          InventoryLocation[]
+  cardHandoffsSent             CardHandoff[]                       @relation("CardHandoffSender")
+  cardHandoffsReceived         CardHandoff[]                       @relation("CardHandoffRecipient")
   tradeWishlistTargets        TradeWishlistItem[]                 @relation("TradeWishlistTargetOwner")
   importBatchesSelected       ImportBatch[]                       @relation("ImportBatchSelectedPlayer")
   importBatchesOriginalOpened ImportBatch[]                       @relation("ImportBatchOriginalOpener")
@@ -950,6 +997,64 @@ model InventoryItem {
   @@index([locationId, locationSection])
   @@index([cardId, quantity])
   @@index([foilStatus, condition, language])
+}
+
+// An immutable handoff receipt survives later removal of either inventory lot.
+model CardHandoff {
+  id                      String   @id @default(cuid())
+  actorUserId             String
+  actorUser               User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  requestId               String
+  requestHash             String
+  fromPlayerId            String
+  fromPlayer              Player   @relation("CardHandoffSender", fields: [fromPlayerId], references: [id], onDelete: Restrict)
+  toPlayerId              String?
+  toPlayer                Player?  @relation("CardHandoffRecipient", fields: [toPlayerId], references: [id], onDelete: Restrict)
+  senderName              String
+  recipientName           String
+  kind                    String
+  cardId                  String
+  cardName                String
+  quantity                Int
+  sourceInventoryItemId   String
+  receivedInventoryItemId String?
+  snapshot                Json
+  createdAt               DateTime @default(now())
+
+  @@unique([actorUserId, requestId])
+  @@index([fromPlayerId, createdAt, id])
+  @@index([toPlayerId, createdAt, id])
+  @@index([fromPlayerId, cardId, createdAt])
+}
+
+model BulkCleanupAction {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  ownerPlayerId String
+  requestId     String
+  requestHash   String
+  action        String
+  resultJson    Json
+  createdAt     DateTime @default(now())
+
+  @@unique([actorUserId, requestId])
+  @@index([actorUserId, createdAt, id])
+}
+
+model CardHuntAction {
+  id              String   @id @default(cuid())
+  actorUserId     String
+  actorUser       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  ownerPlayerId   String
+  requestId       String
+  requestHash     String
+  action          String
+  resultJson      Json
+  createdAt       DateTime @default(now())
+
+  @@unique([actorUserId, requestId])
+  @@index([actorUserId, createdAt])
 }
 
 model InventoryAuditLog {

@@ -2,13 +2,16 @@
 
 Issue #1008: make a list of the storage boxes and sections needed to pull cards.
 Brian confirmed storage-only candidates and, on November 6, preferences first
-with a choice to optimize. This is a read-only plan, not a reservation, inventory
-move, deck edit or saved hunt.
+with a choice to optimize. Planning remains read-only and does not reserve copies.
+Brian's November 23 request adds explicit selected-copy commitments and handoffs,
+and multiple decks/lists. He confirmed that quantities add across sources, so
+each destination receives separate physical copies.
 
 ## Using a hunt
 
 Open Card Hunt in navigation, or use Card Hunt in a deck's tools. Choose a personal
-deck or paste a list using the existing decklist syntax. Maybeboard is excluded
+deck, several decks, or named pasted lists using the existing decklist syntax.
+Decks and lists can be combined in one hunt. Maybeboard is excluded
 unless selected. Copies already committed to the source deck reduce what remains
 to pull, consuming each committed quantity once across duplicate requests.
 
@@ -45,11 +48,50 @@ in administrator mode. Owner IDs supplied by clients are ignored. The endpoint
 uses a repeatable-read snapshot and private/no-store responses. A plan is not a
 promise of future availability; rebuild it when inventory or trades change.
 
-The request body is bounded at128KB, text at100,000characters and500card lines.
-Individual quantities must be whole numbers from1to1,000,000. This bounds one
+The planning body is bounded at 128 KB, text at 100,000 characters total and
+combined hunts at 1,000 card lines. Legacy single-source requests retain their
+500-line bound. Individual quantities must be whole numbers from 1 to 1,000,000. This bounds one
 planning request, not collection size. Results page boxes/lines and progressively
-show large box contents. Shortages and parsing notes remain visible. Pull checkboxes
-are temporary page reminders and are not persisted or shared across pagination.
+show large box contents. Shortages and parsing notes remain visible. Pull selections
+and editable quantities survive filtering, box paging and progressive expansion
+within the current page.
+
+## Confirming selected pulls
+
+Every pull names its source deck/list and exact storage lot, printing, finish,
+condition, language and section. Select pulls, a whole box or all planned pulls,
+then choose an action. Up to 500 pulls fit one confirmation.
+
+**Commit selected to decks** moves saved-deck pulls to their respective decks.
+All selected pulls must come from saved decks. Physical quantities, lot provenance
+are preserved. The deck list follows the committed physical printings: mixed
+printings become separate rows with their own quantities, section and notes.
+Unfilled copies retain their requested printing. For older mismatches, the deck
+page offers **Match committed printings**, which corrects the list without moving
+physical copies. Existing commitments reduce each deck's needs
+separately. League decks and trade-reserved decks are excluded.
+
+Deck commitment controls use the same whole-deck allocation for single commits,
+bulk commits and adding real copies. A committed basic land belongs to one row;
+it cannot also fill a second row for another printing. Basic lands remain covered
+for deck planning, while physical commitment capacity uses actual copies.
+
+**Give / trade selected** records a named outside recipient in existing private
+handoff history, or immediately transfers to an Archive user's Unassigned location.
+This uses the individual Inventory handoff service. Given pulls leave the current
+hunt so they are not offered again in that session. Building a new hunt starts
+fresh. Giving away a deck's pulls does not commit them to that deck.
+
+One confirmation rechecks current ownership, exact source revisions, current deck
+rows, unreserved quantities and active storage. The entire selected action applies
+atomically or moves nothing. Durable actor/request receipts preserve the result
+across replay, lost responses and the last source copy. Unknown outcomes retain
+the same frozen confirmation in the browser tab; check it before another handoff.
+A definitive rejection closes that request so a late retry cannot apply it.
+Individual and hunt handoffs recognize each other's pending tab state.
+
+The additive `20261124030000_card_hunt_actions` migration adds those receipts.
+Ordinary updates apply it; no environment or Compose changes are required.
 
 ## Qualification
 

@@ -35,7 +35,6 @@ import {
   auditDeckMoveSnapshot,
   ensureDeckLocation,
   matchesDeckCardPrinting,
-  summarizeDeckCommitmentOwnership,
 } from "@/lib/deck-commitments";
 import {
   findSystemDeckLocation,
@@ -47,6 +46,21 @@ import { parseDeckTags, replaceDeckTags } from "@/lib/deck-tags";
 import {
   requireLeaguePrinting,
 } from "@/lib/commander-league-inventory";
+
+import { getDeckRowCommittedQuantity, syncCommittedDeckPrintings } from "@/lib/deck-committed-printings";
+
+export async function matchCommittedDeckPrintings(fd: FormData) {
+  const deckId = formString(fd, "deckId");
+  const { deck } = await requireManagedDeck(deckId);
+  await prisma.$transaction(async tx => {
+    await lockWritableDeck(tx, deckId, deck.ownerUserId);
+    const current = await tx.deck.findUniqueOrThrow({ where: { id: deckId }, include: { ownerUser: true, commanderLeagueDeck: true } });
+    if (current.commanderLeagueDeck || !current.ownerUser.playerId) throw new Error("Use a personal deck with an inventory owner.");
+    await syncCommittedDeckPrintings(tx, deckId, current.ownerUser.playerId);
+  }, { isolationLevel: "Serializable", timeout: 60000 });
+  revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/decks");
+}
 
 function formString(fd: FormData, name: string) {
   return String(fd.get(name) || "").trim();
@@ -871,8 +885,10 @@ export async function addRealCopyToDeck(fd: FormData) {
     const remainingNeeded = Math.max(
       0,
       deckCard.quantity -
-        summarizeDeckCommitmentOwnership(
-          deckCard,
+        (await getDeckRowCommittedQuantity(
+          tx,
+          deck.id,
+          deckCard.id,
           await tx.inventoryItem.findMany({
             where: {
               currentOwnerId: deck.ownerUser.playerId!,
@@ -881,8 +897,7 @@ export async function addRealCopyToDeck(fd: FormData) {
             },
             include: { card: true, location: true },
           }),
-          deck.id,
-        ).committedToThisDeck,
+        )),
     );
     if (quantity > remainingNeeded) {
       throw new Error(
@@ -1007,14 +1022,12 @@ export async function commitDeckCardToDeck(fd: FormData) {
       },
       include: { card: true, location: true },
     });
-    const committed = summarizeDeckCommitmentOwnership(
-      deckCard,
-      committedItems,
-      deck.id,
+    const committed = await getDeckRowCommittedQuantity(
+      tx, deck.id, deckCard.id, committedItems,
     );
     const remainingNeeded = Math.max(
       0,
-      deckCard.quantity - committed.committedToThisDeck,
+      deckCard.quantity - committed,
     );
     if (quantity > remainingNeeded) {
       throw new Error(
@@ -1132,15 +1145,13 @@ export async function bulkCommitDeckCardsToDeck(fd: FormData) {
         },
         include: { card: true, location: true },
       });
-      const committed = summarizeDeckCommitmentOwnership(
-        deckCard,
-        committedItems,
-        deck.id,
+      const committed = await getDeckRowCommittedQuantity(
+        tx, deck.id, deckCard.id, committedItems,
       );
       const quantityToMove = Math.min(
         quantity,
         source.quantity,
-        Math.max(0, deckCard.quantity - committed.committedToThisDeck),
+        Math.max(0, deckCard.quantity - committed),
       );
       if (quantityToMove <= 0) continue;
       if (matchType === "other") {
